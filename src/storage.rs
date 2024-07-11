@@ -1,8 +1,10 @@
 use crate::types::money_pool::MoneyPool;
+
 use crate::types::transaction::{Transaction, TransactionFilter};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Display;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 pub struct StorageError {
@@ -45,7 +47,7 @@ pub trait Storage {
 
 // implementations
 
-struct InmemoryStorage {
+pub struct InmemoryStorage {
     pools: HashMap<String, Vec<MoneyPool>>,
     transactions: HashMap<String, Vec<Transaction>>,
 }
@@ -163,5 +165,62 @@ mod inmemory_storage_tests {
         assert!(load_res.is_ok());
         let loaded = load_res.unwrap();
         assert_eq!(loaded.len(), 3);
+    }
+}
+
+// simple inmemory storage wrapped in sync machinery to allow its use in an async web app
+
+#[derive(Clone)]
+pub struct SharedInmemoryStorage {
+    inner: Arc<Mutex<InmemoryStorage>>,
+}
+
+impl SharedInmemoryStorage {
+    pub fn new() -> SharedInmemoryStorage {
+        SharedInmemoryStorage {
+            inner: Arc::new(Mutex::new(InmemoryStorage::new())),
+        }
+    }
+}
+
+impl Storage for SharedInmemoryStorage {
+    async fn add_pool(&mut self, user_id: &str, new_pool: MoneyPool) -> Result<(), StorageError> {
+        self.inner.lock().unwrap().add_pool(user_id, new_pool).await
+    }
+    async fn load_pool(
+        &self,
+        user_id: &str,
+        pool_id: &str,
+    ) -> Result<Option<MoneyPool>, StorageError> {
+        self.inner.lock().unwrap().load_pool(user_id, pool_id).await
+    }
+
+    async fn load_pools(&self, user_id: &str) -> Result<Vec<MoneyPool>, StorageError> {
+        self.inner.lock().unwrap().load_pools(user_id).await
+    }
+    async fn add_transaction(
+        &mut self,
+        user_id: &str,
+        transaction: Transaction,
+    ) -> Result<(), StorageError> {
+        self.inner
+            .lock()
+            .unwrap()
+            .add_transaction(user_id, transaction)
+            .await
+    }
+
+    async fn load_transactions(
+        &self,
+        user_id: &str,
+        filter: Option<TransactionFilter>,
+        offset: usize,
+        count: usize,
+    ) -> Result<Vec<Transaction>, StorageError> {
+        self.inner
+            .lock()
+            .unwrap()
+            .load_transactions(user_id, filter, offset, count)
+            .await
     }
 }
