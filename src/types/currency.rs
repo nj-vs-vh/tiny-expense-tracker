@@ -3,7 +3,7 @@ use serde::de::{self, Error, Unexpected, Visitor};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Currency {
     // wrapping rusty money Currency type to make it (de)serializable
     pub rmc: rmCurrency,

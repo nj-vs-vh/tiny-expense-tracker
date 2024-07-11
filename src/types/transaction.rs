@@ -17,6 +17,7 @@ pub struct Transaction {
 }
 
 impl Transaction {
+    #[allow(dead_code)]
     pub fn new_regular(amount: f32, pool_id: String, description: String) -> Transaction {
         Transaction {
             id: Uuid::new_v4().to_string(),
