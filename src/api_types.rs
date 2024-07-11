@@ -2,16 +2,17 @@ use crate::storage;
 use axum::async_trait;
 use axum::{
     extract::{FromRef, FromRequestParts},
-    http::{request::Parts, StatusCode},
+    http::request::Parts,
     response::Response,
 };
+use serde::Deserialize;
 
 // can be adjusted to compile with various DB backend support
 pub type AppStorage = storage::SharedInmemoryStorage;
 
 #[derive(Clone)]
 pub struct AppState {
-    storage: AppStorage,
+    pub storage: AppStorage,
     // TODO: auth-related inmemory info storage here
 }
 
@@ -19,13 +20,6 @@ impl AppState {
     pub fn new(storage: AppStorage) -> AppState {
         AppState { storage }
     }
-}
-
-pub fn to_http500<E>(err: E) -> (StatusCode, String)
-where
-    E: std::error::Error,
-{
-    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
 }
 
 pub struct Auth {
@@ -49,4 +43,10 @@ where
             user_id: "temp".to_owned(),
         });
     }
+}
+
+#[derive(Deserialize)]
+pub struct PaginationParams {
+    offset: usize,
+    count: usize,
 }

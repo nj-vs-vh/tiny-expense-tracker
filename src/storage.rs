@@ -4,7 +4,8 @@ use crate::types::transaction::{Transaction, TransactionFilter};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Display;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub struct StorageError {
@@ -185,18 +186,18 @@ impl SharedInmemoryStorage {
 
 impl Storage for SharedInmemoryStorage {
     async fn add_pool(&mut self, user_id: &str, new_pool: MoneyPool) -> Result<(), StorageError> {
-        self.inner.lock().unwrap().add_pool(user_id, new_pool).await
+        self.inner.lock().await.add_pool(user_id, new_pool).await
     }
     async fn load_pool(
         &self,
         user_id: &str,
         pool_id: &str,
     ) -> Result<Option<MoneyPool>, StorageError> {
-        self.inner.lock().unwrap().load_pool(user_id, pool_id).await
+        self.inner.lock().await.load_pool(user_id, pool_id).await
     }
 
     async fn load_pools(&self, user_id: &str) -> Result<Vec<MoneyPool>, StorageError> {
-        self.inner.lock().unwrap().load_pools(user_id).await
+        self.inner.lock().await.load_pools(user_id).await
     }
     async fn add_transaction(
         &mut self,
@@ -205,7 +206,7 @@ impl Storage for SharedInmemoryStorage {
     ) -> Result<(), StorageError> {
         self.inner
             .lock()
-            .unwrap()
+            .await
             .add_transaction(user_id, transaction)
             .await
     }
@@ -219,7 +220,7 @@ impl Storage for SharedInmemoryStorage {
     ) -> Result<Vec<Transaction>, StorageError> {
         self.inner
             .lock()
-            .unwrap()
+            .await
             .load_transactions(user_id, filter, offset, count)
             .await
     }
