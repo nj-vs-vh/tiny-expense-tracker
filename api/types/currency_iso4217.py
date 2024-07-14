@@ -19,3 +19,9 @@ class CurrencyISO4217:
 
     def __hash__(self) -> str:
         return hash(self.code)
+
+    def __str__(self) -> str:
+        return self.code
+    
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(\"{self.code}\")"

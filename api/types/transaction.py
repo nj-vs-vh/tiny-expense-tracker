@@ -1,6 +1,7 @@
 import pydantic
 import datetime
 
+from api.types.currency import Currency
 from api.types.money_pool import MoneyPoolId
 from api.types.money_sum import MoneySum
 
@@ -15,6 +16,9 @@ class Transaction(pydantic.BaseModel):
 
     # diffuse = a transaction implying any number of actual transactions too small to be tracked
     is_diffuse: bool = False
+
+    # for transactions made not in pool's currency
+    original_currency: Currency | None = None
 
 
 class TransactionFilter(pydantic.BaseModel):

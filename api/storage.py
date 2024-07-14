@@ -34,6 +34,8 @@ class Storage(abc.ABC):
 
 
 class InmemoryStorage(Storage):
+    """Lacks synchronization, only for testing purposes"""
+
     def __init__(self) -> None:
         self._user_transactions: dict[UserId, list[Transaction]] = {}
         self._user_pools: dict[UserId, dict[MoneyPoolId, MoneyPool]] = {}
@@ -64,6 +66,13 @@ class InmemoryStorage(Storage):
         return user_pools.get(pool_id)
 
     async def add_transaction(self, user_id: str, transaction: Transaction) -> None:
+        pool = await self.load_pool(user_id, transaction.pool_id)
+        if pool is None:
+            raise ValueError("Transaction attributed to non-existent pool")
+        target_sum = next(
+            s for s in pool.balance if s.currency == transaction.sum.currency
+        )
+        target_sum.amount += transaction.sum.amount
         self._user_transactions.setdefault(user_id, []).append(transaction)
 
     async def load_transactions(
@@ -72,4 +81,6 @@ class InmemoryStorage(Storage):
         transactions = self._user_transactions.get(user_id, [])
         if filter is not None:
             transactions = [t for t in transactions if filter.matches(t)]
-        return transactions[-offset - count - 1 : -offset - 1]
+        end = len(transactions) - offset
+        start = end - count - 1
+        return transactions[start:end]

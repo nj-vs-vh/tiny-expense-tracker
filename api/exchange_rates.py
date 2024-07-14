@@ -26,7 +26,7 @@ class ExchangeRates(abc.ABC):
     def convert(self, sum_: MoneySum, new_currency: Currency) -> MoneySum: ...
 
 
-class DumpExchangeRates(ExchangeRates):
+class DumbExchangeRates(ExchangeRates):
     async def initialize(self) -> None:
         pass
 
