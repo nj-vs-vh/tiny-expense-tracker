@@ -13,8 +13,6 @@ class Transaction(pydantic.BaseModel):
     pool_id: MoneyPoolId
     description: str
 
-    # conversion = movement of money between pools, done in two "paired" transactions
-    conversion_counterpart_transaction_id: str | None = None
     # diffuse = a transaction implying any number of actual transactions too small to be tracked
     is_diffuse: bool = False
 
