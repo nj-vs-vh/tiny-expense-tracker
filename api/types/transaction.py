@@ -25,6 +25,10 @@ class TransactionFilter(pydantic.BaseModel):
     max_timestamp: datetime.datetime | None = None
     pool_ids: list[MoneyPoolId] | None = None
 
+    @classmethod
+    def empty(cls) -> "TransactionFilter":
+        return TransactionFilter()
+
     def matches(self, t: Transaction) -> bool:
         if self.min_timestamp is not None and t.timestamp < self.min_timestamp:
             return False
