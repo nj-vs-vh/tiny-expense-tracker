@@ -3,26 +3,20 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException
 import pydantic
 
+from api.auth import Auth
 from api.storage import Storage
 from api.types import MoneyPoolIdResponse, UserId
 from api.types.money_pool import MoneyPool, MoneyPoolId
 from api.types.transaction import Transaction
 
-
-async def auth(secret: Annotated[str | None, Header()] = None) -> UserId:
-    if secret == "secret":
-        return 123
-    else:
-        raise HTTPException(status_code=403, detail="Missing or invalid auth header")
-
-
-AthorizedUser = Annotated[UserId, Depends(auth)]
 Offset = Annotated[int, pydantic.Field(ge=0)]
 Count = Annotated[int, pydantic.Field(ge=1, le=200)]
 
 
-def create_app(storage: Storage) -> FastAPI:
+def create_app(storage: Storage, auth: Auth) -> FastAPI:
     app = FastAPI()
+
+    AthorizedUser = Annotated[UserId, Depends(auth.authorize_request)]
 
     @app.post("/pools")
     async def create_pool(

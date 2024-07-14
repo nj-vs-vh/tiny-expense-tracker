@@ -8,20 +8,26 @@ from api.types.transaction import Transaction, TransactionFilter
 
 
 class Storage(abc.ABC):
+    @abc.abstractmethod
     async def add_pool(self, user_id: UserId, new_pool: MoneyPool) -> MoneyPoolId: ...
 
+    @abc.abstractmethod
     async def add_balance_to_pool(
         self, user_id: UserId, pool_id: MoneyPoolId, new_balance: MoneySum
     ) -> None: ...
 
+    @abc.abstractmethod
     async def load_pools(self, user_id: UserId) -> dict[MoneyPoolId, MoneyPool]: ...
 
+    @abc.abstractmethod
     async def load_pool(
         self, user_id: UserId, pool_id: MoneyPoolId
     ) -> MoneyPool | None: ...
 
+    @abc.abstractmethod
     async def add_transaction(self, user_id: str, transaction: Transaction) -> None: ...
 
+    @abc.abstractmethod
     async def load_transactions(
         self, user_id: UserId, filter: TransactionFilter | None, offset: int, count: int
     ) -> list[Transaction]: ...
