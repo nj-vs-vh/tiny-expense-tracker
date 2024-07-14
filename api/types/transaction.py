@@ -8,7 +8,6 @@ TransactionId = str
 
 
 class Transaction(pydantic.BaseModel):
-    id: TransactionId
     timestamp: datetime.datetime
     sum: MoneySum
     pool_id: MoneyPoolId

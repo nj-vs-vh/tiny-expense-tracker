@@ -13,6 +13,7 @@ def parse_currency(v: Any) -> CurrencyISO4217:
         raise TypeError(
             f"currency value must be a string containing three-letter ISO2417 code"
         )
+    v = v.upper()
     if v not in CURRENCIES:
         raise ValueError(f"not a valid ISO 4217 code: {v}")
     return CURRENCIES[v]
@@ -26,4 +27,5 @@ Currency = Annotated[
     CurrencyISO4217,
     pydantic.BeforeValidator(parse_currency),
     pydantic.PlainSerializer(dump_currency, return_type=str),
+    pydantic.WithJsonSchema({"type": "string"}),
 ]

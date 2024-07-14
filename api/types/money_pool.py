@@ -1,11 +1,10 @@
-from api.types.currency import Currency
+import pydantic
 from api.types.money_sum import MoneySum
 
 
 MoneyPoolId = str
 
 
-class MoneyPool:
-    id: str
+class MoneyPool(pydantic.BaseModel):
     display_name: str
-    balance: MoneySum
+    balance: list[MoneySum]
