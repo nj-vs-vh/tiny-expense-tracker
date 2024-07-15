@@ -21,14 +21,19 @@ Count = Annotated[int, pydantic.Field(ge=1, le=200)]
 
 
 async def coerce_to_pool(
-    transaction: Transaction,
-    pool: MoneyPool,
-    exchange_rates: ExchangeRates,
+    transaction: Transaction, pool: MoneyPool, exchange_rates: ExchangeRates
 ) -> None:
     if transaction.sum.currency in [sum.currency for sum in pool.balance]:
         return
     transaction.original_currency = transaction.sum.currency
-    transaction.sum = exchange_rates.convert(transaction.sum, pool.balance[0].currency)
+    rate = await exchange_rates.get_rate(
+        base=transaction.original_currency,
+        target=pool.balance[0].currency,
+    )
+    transaction.sum = MoneySum(
+        amount=float(transaction.sum.amount) * rate.rate,  # conversion back to decimal is handled by validator
+        currency=rate.target,
+    )
 
 
 def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> FastAPI:

@@ -28,3 +28,5 @@ Currency = Annotated[
     pydantic.PlainSerializer(dump_currency, return_type=str),
     pydantic.WithJsonSchema({"type": "string"}),
 ]
+
+CurrencyAdapter = pydantic.TypeAdapter(Currency)

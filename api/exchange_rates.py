@@ -2,6 +2,7 @@ import abc
 import asyncio
 import datetime
 import json
+from locale import currency
 import logging
 import random
 import time
@@ -11,90 +12,124 @@ from typing import Literal, TypedDict
 import aiohttp
 import pydantic
 
-from api.types.currency import Currency
-from api.types.money_sum import MoneySum
+from api.types.currency import Currency, CurrencyAdapter
+from api.types.datetime import Datetime
 
 logger = logging.getLogger(__name__)
 
 
+class ExchangeRate(pydantic.BaseModel):
+    base: Currency
+    target: Currency
+    rate: float
+    updated_on: Datetime
+
+
 class ExchangeRates(abc.ABC):
 
-    @abc.abstractmethod
-    async def initialize(self) -> None: ...
-
-    @abc.abstractmethod
-    def convert(self, sum_: MoneySum, new_currency: Currency) -> MoneySum: ...
-
-
-class DumbExchangeRates(ExchangeRates):
     async def initialize(self) -> None:
         pass
 
-    def convert(self, sum_: MoneySum, new_currency: Currency) -> MoneySum:
-        return MoneySum(amount=sum_.amount, currency=new_currency)
+    @abc.abstractmethod
+    async def get_rate(self, base: Currency, target: Currency) -> ExchangeRate: ...
+
+
+class DumbExchangeRates(ExchangeRates):
+    async def get_rate(self, base: Currency, target: Currency) -> ExchangeRate:
+        return ExchangeRate(
+            base=base,
+            target=target,
+            rate=1.0,
+            updated_on=datetime.datetime.now(),
+        )
 
 
 class ExchangeRatesApiResponse(TypedDict):
-    result: Literal["success"] | str
+    result: str
     time_last_update_unix: int
     time_last_update_utc: str
     time_next_update_unix: int
     time_next_update_utc: str
     time_eol_unix: int
-    base_code: Literal["USD"]
+    base_code: str
     rates: dict[str, float]
 
 
 ExchangeRatesApiResponseValidator = pydantic.TypeAdapter(ExchangeRatesApiResponse)
+ExchangeRateList = pydantic.TypeAdapter(list[ExchangeRate])
 
 
 class RemoteExchangeRates(ExchangeRates):
     def __init__(self, api_url: str, cache_file_path: Path) -> None:
         self.api_url = api_url
         self.cache_file_path = cache_file_path
-        self._cached_response: ExchangeRatesApiResponse | None = None
+        self._cached_rates = (
+            ExchangeRateList.validate_json(self.cache_file_path.read_text())
+            if self.cache_file_path.exists()
+            else []
+        )
 
-    @property
-    def cached_response(self) -> ExchangeRatesApiResponse:
-        if self._cached_response is None:
-            raise RuntimeError("Exchange rates are not initialized")
-        return self._cached_response
-
-    async def load_exchange_rates(self) -> ExchangeRatesApiResponse:
+    async def update_exchange_rates(self, base: Currency) -> list[ExchangeRate] | None:
+        logger.info(f"Updating exchange rates from {base}")
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(self.api_url) as resp:
-                    return ExchangeRatesApiResponseValidator.validate_json(await resp.text())
+                async with session.get(self.api_url + "/" + base.code.upper()) as resp:
+                    logger.info(f"Got response from API: {resp}")
+                    response = ExchangeRatesApiResponseValidator.validate_json(await resp.text())
+                    assert response["result"] == "success"
+                    base_retrieved = CurrencyAdapter.validate_python(response["base_code"])
+                    new_rates: list[ExchangeRate] = []
+                    for target_code, rate in response["rates"].items():
+                        try:
+                            new_rates.append(
+                                ExchangeRate(
+                                    base=base_retrieved,
+                                    target=CurrencyAdapter.validate_python(target_code),
+                                    rate=rate,
+                                    updated_on=datetime.datetime.fromtimestamp(
+                                        response["time_last_update_unix"]
+                                    ),
+                                )
+                            )
+                        except Exception:
+                            logger.info(
+                                f"Failed to parse exchange rate {base_retrieved} -> {target_code} ({rate})"
+                            )
+                    logger.info(f"Extracted {len(new_rates)} new rates")
+                    merged_rates = self._cached_rates + new_rates
+                    merged_rates.sort(key=lambda er: er.updated_on, reverse=True)
+                    filtered_rates: list[ExchangeRate] = []
+                    seen_pairs: set[tuple[Currency, Currency]] = set()
+                    for rate in merged_rates:
+                        pair = (rate.base, rate.target)
+                        if pair in seen_pairs:
+                            continue
+                        else:
+                            seen_pairs.add(pair)
+                            filtered_rates.append(rate)
+                    self._cached_rates = filtered_rates
+                    logger.exception(f"Cached rates updated, saving on disk")
+                    self.cache_file_path.write_bytes(
+                        ExchangeRateList.dump_json(self._cached_rates)
+                    )
+                    logger.exception(f"Cached rates saved to file")
         except Exception:
-            logger.exception("Error calling exchange rates API, will try to use cached file")
+            logger.exception(f"Error updating exchnage rates for {base}")
 
-        try:
-            return ExchangeRatesApiResponseValidator.validate_json(
-                self.cache_file_path.read_text()
-            )
-        except Exception:
-            logger.exception("Error reading cached exchange rates from file")
+    def get_cached_rate_matches(self, base: Currency, target: Currency) -> list[ExchangeRate]:
+        return sorted(
+            [r for r in self._cached_rates if r.base == base and r.target == target],
+            key=lambda er: er.updated_on,
+            reverse=True,
+        )
 
-    async def _load_and_cache_exchange_rates(self) -> None:
-        self._cached_response = await self.load_exchange_rates()
-        self.cache_file_path.write_text(json.dumps(self._cached_response))
-
-    async def _periodic_update(self) -> None:
-        while True:
-            if self._cached_response is not None:
-                sleep_time = self._cached_response["time_next_update_unix"] - time.time()
-                sleep_time = max(sleep_time, 0)
-                sleep_time += 60 * random.randint(60, 5 * 60)  # add 1 to 5 hours
-            else:
-                sleep_time = datetime.timedelta(days=1).total_seconds()
-            logger.info(f"Sleeping for: {datetime.timedelta(seconds=sleep_time)}")
-            await asyncio.sleep(sleep_time)
-            try:
-                logger.info("Updating exchange rates...")
-                await self._load_and_cache_exchange_rates()
-            except Exception:
-                logger.info("Failed to update, will try another time", exc_info=True)
-
-    async def initialize(self) -> None:
-        await self._load_and_cache_exchange_rates()
-        asyncio.create_task(self._periodic_update(), name="periodic exchange rates update")
+    async def get_rate(self, base: Currency, target: Currency) -> ExchangeRate:
+        matches = self.get_cached_rate_matches(base, target)
+        if not matches or (datetime.datetime.now() - matches[0].updated_on) > datetime.timedelta(
+            days=3
+        ):
+            await self.update_exchange_rates(base)
+            matches = self.get_cached_rate_matches(base, target)
+            if not matches:
+                raise RuntimeError(f"Failed to fetch exchange rate for {base} -> {target}")
+        return matches[0]

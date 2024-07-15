@@ -4,6 +4,7 @@ import time
 import uuid
 from typing import Any, Self, Type
 
+import fastapi
 import pydantic
 from bson import ObjectId
 from motor.motor_asyncio import (
@@ -134,6 +135,9 @@ class MongoDbStorage(Storage):
         return str(result.inserted_id)
 
     def _pool_filter(self, user_id: UserId, pool_id: MoneyPoolId) -> dict[str, Any]:
+        if not ObjectId.is_valid(pool_id):
+            # HACK: storage is not supposed to validate data in API, but I'm lazy now
+            raise fastapi.HTTPException(404, "Invalid pool id")
         return {"_id": ObjectId(pool_id), "owner": user_id}
 
     async def _load_pool_internal(
