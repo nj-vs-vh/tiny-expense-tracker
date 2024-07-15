@@ -1,20 +1,34 @@
 import abc
+import logging
+import time
 import uuid
+from typing import Any, Self, Type
 
-from api.types import UserId
-from api.types.money_pool import MoneyPool, MoneyPoolId
+import pydantic
+from bson import ObjectId
+from motor.motor_asyncio import (
+    AsyncIOMotorClient,
+    AsyncIOMotorClientSession,
+    AsyncIOMotorCollection,
+)
+
+from api.types import MoneyPoolId, UserId
+from api.types.money_pool import MoneyPool
 from api.types.money_sum import MoneySum
 from api.types.transaction import Transaction, TransactionFilter
 
 
 class Storage(abc.ABC):
+    async def initialize(self) -> None:
+        pass
+
     @abc.abstractmethod
     async def add_pool(self, user_id: UserId, new_pool: MoneyPool) -> MoneyPoolId: ...
 
     @abc.abstractmethod
     async def add_balance_to_pool(
         self, user_id: UserId, pool_id: MoneyPoolId, new_balance: MoneySum
-    ) -> None: ...
+    ) -> bool: ...
 
     @abc.abstractmethod
     async def load_pools(self, user_id: UserId) -> dict[MoneyPoolId, MoneyPool]: ...
@@ -45,8 +59,10 @@ class InmemoryStorage(Storage):
 
     async def add_balance_to_pool(
         self, user_id: UserId, pool_id: UserId, new_balance: MoneySum
-    ) -> None:
+    ) -> bool:
         p = await self.load_pool(user_id, pool_id)
+        if p is None:
+            return None
         if new_balance.currency not in [s.currency for s in p.balance]:
             p.balance.append(new_balance)
         else:
@@ -63,8 +79,7 @@ class InmemoryStorage(Storage):
         pool = await self.load_pool(user_id, transaction.pool_id)
         if pool is None:
             raise ValueError("Transaction attributed to non-existent pool")
-        target_sum = next(s for s in pool.balance if s.currency == transaction.sum.currency)
-        target_sum.amount += transaction.sum.amount
+        pool.update_with_transaction(transaction)
         self._user_transactions.setdefault(user_id, []).append(transaction)
 
     async def load_transactions(
@@ -76,3 +91,108 @@ class InmemoryStorage(Storage):
         end = len(transactions) - offset
         start = end - count - 1
         return transactions[start:end]
+
+
+class MongoStoredModel(pydantic.BaseModel):
+
+    @classmethod
+    def from_mongo(cls: Type[Self], raw: Any) -> Self:
+        if isinstance(raw, dict):
+            raw.pop("_id", None)
+        return cls.model_validate(raw)
+
+
+class OwnedPool(MongoStoredModel):
+    pool: MoneyPool
+    owner: UserId
+
+
+class OwnedTransaction(MongoStoredModel):
+    transaction: Transaction
+    owner: UserId
+
+
+class MongoDbStorage(Storage):
+    def __init__(self, url: str) -> None:
+        self.client = AsyncIOMotorClient(url)
+        self.logger = logging.getLogger(f"{__name__}.{__class__.__name__}")
+        db = "tiny-expense-tracker"
+        self.transactions_coll: AsyncIOMotorCollection = self.client[db].transactions
+        self.pools_coll: AsyncIOMotorCollection = self.client[db].pools
+
+    async def initialize(self) -> None:
+        start = time.time()
+        await self.client.admin.command("ping")
+        self.logger.info(f"MongoDB pinged in {time.time() - start:.2} sec")
+        # self.logger.info(f"transactions: {await self.transactions_coll.count_documents({})}")
+        # self.logger.info(f"pools: {await self.pools_coll.count_documents({})}")
+
+    async def add_pool(self, user_id: UserId, new_pool: MoneyPool) -> UserId:
+        result = await self.pools_coll.insert_one(
+            OwnedPool(pool=new_pool, owner=user_id).model_dump(mode="json")
+        )
+        return str(result.inserted_id)
+
+    def _pool_filter(self, user_id: UserId, pool_id: MoneyPoolId) -> dict[str, Any]:
+        return {"_id": ObjectId(pool_id), "owner": user_id}
+
+    async def _load_pool_internal(
+        self, user_id: UserId, pool_id: MoneyPoolId, session: AsyncIOMotorClientSession | None
+    ) -> MoneyPool | None:
+        doc = await self.pools_coll.find_one(self._pool_filter(user_id, pool_id), session=session)
+        if doc is None:
+            return None
+        return OwnedPool.from_mongo(doc).pool
+
+    async def load_pool(self, user_id: UserId, pool_id: UserId) -> MoneyPool | None:
+        return await self._load_pool_internal(user_id, pool_id, session=None)
+
+    async def load_pools(self, user_id: UserId) -> dict[str, MoneyPool]:
+        cursor = self.pools_coll.find({"owner": user_id})
+        docs = await cursor.to_list(length=1000)
+        return {str(d["_id"]): OwnedPool.from_mongo(d).pool for d in docs}
+
+    async def add_balance_to_pool(
+        self, user_id: UserId, pool_id: UserId, new_balance: MoneySum
+    ) -> bool:
+        result = await self.pools_coll.update_one(
+            self._pool_filter(user_id, pool_id),
+            {"$push": {"pool.balance": new_balance.model_dump(mode="json")}},
+        )
+        return result.modified_count == 1
+
+    async def add_transaction(self, user_id: UserId, transaction: Transaction) -> None:
+        async def internal(session: AsyncIOMotorClientSession) -> None:
+            pool = await self._load_pool_internal(user_id, transaction.pool_id, session=session)
+            if pool is None:
+                return
+            new_sum_idx_in_balance, new_sum = pool.update_with_transaction(transaction)
+            await self.pools_coll.update_one(
+                self._pool_filter(user_id, transaction.pool_id),
+                {
+                    "$set": {
+                        f"pool.balance.{new_sum_idx_in_balance}": new_sum.model_dump(mode="json")
+                    }
+                },
+            )
+            await self.transactions_coll.insert_one(
+                OwnedTransaction(transaction=transaction, owner=user_id).model_dump(mode="json"),
+                session=session,
+            )
+
+        async with await self.client.start_session() as session:
+            await session.with_transaction(internal)
+
+    async def load_transactions(
+        self, user_id: UserId, filter: TransactionFilter | None, offset: int, count: int
+    ) -> list[Transaction]:
+        docs = (
+            await self.transactions_coll.find(
+                {"owner": user_id},
+                # TODO support filtering
+            )
+            .sort("transaction.timestamp", -1)
+            .skip(offset)
+            .to_list(length=count)
+        )
+        return [OwnedTransaction.from_mongo(d).transaction for d in docs]

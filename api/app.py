@@ -1,5 +1,6 @@
 import datetime
 import logging
+from contextlib import asynccontextmanager
 from typing import Annotated
 
 import pydantic
@@ -8,8 +9,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from api.auth import Auth
 from api.exchange_rates import ExchangeRates
 from api.storage import Storage
-from api.types import MoneyPoolIdResponse, SyncBalanceRequestBody, UserId
-from api.types.money_pool import MoneyPool, MoneyPoolId
+from api.types import MoneyPoolId, MoneyPoolIdResponse, SyncBalanceRequestBody, UserId
+from api.types.money_pool import MoneyPool
 from api.types.money_sum import MoneySum
 from api.types.transaction import Transaction
 
@@ -31,7 +32,18 @@ async def coerce_to_pool(
 
 
 def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> FastAPI:
-    app = FastAPI()
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        logger.info("Running lifespan methods")
+        await storage.initialize()
+        logger.info("Storage initialized")
+        await exchange_rates.initialize()
+        logger.info("Exchange rates initialized")
+        yield
+        logger.info("Nothing to cleanup, bye")
+
+    app = FastAPI(lifespan=lifespan)
 
     AuthorizedUser = Annotated[UserId, Depends(auth.authorize_request)]
 
@@ -45,7 +57,7 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
         return await storage.load_pools(user_id=user_id)
 
     @app.get("/pools/{pool_id}")
-    async def get_pools(user_id: AuthorizedUser, pool_id: str) -> MoneyPool:
+    async def get_specific_pool(user_id: AuthorizedUser, pool_id: str) -> MoneyPool:
         pool = await storage.load_pool(user_id=user_id, pool_id=pool_id)
         if pool is None:
             raise HTTPException(status_code=404, detail="Pool not found")
@@ -74,7 +86,7 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
     @app.post("/sync-balance/{pool_id}")
     async def sync_pool_balance(
         user_id: AuthorizedUser, pool_id: str, body: SyncBalanceRequestBody
-    ) -> None:
+    ) -> str:
         pool = await storage.load_pool(user_id, pool_id)
         if pool is None:
             raise HTTPException(404, detail="Pool not found")
@@ -88,6 +100,8 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
         for old_sum, new_amount in zip(pool.balance, body.amounts):
             new_sum = MoneySum(amount=new_amount, currency=old_sum.currency)
             delta = new_sum.amount - old_sum.amount
+            if not delta:
+                continue
             try:
                 await storage.add_transaction(
                     user_id=user_id,
@@ -114,5 +128,6 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
                     503,
                     detail="Failed to save some transactions, sync might be incomplete",
                 )
+        return "OK"
 
     return app
