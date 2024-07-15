@@ -2,8 +2,8 @@ import datetime
 import logging
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException
 import pydantic
+from fastapi import Depends, FastAPI, Header, HTTPException
 
 from api.auth import Auth
 from api.exchange_rates import ExchangeRates
@@ -36,9 +36,7 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
     AuthorizedUser = Annotated[UserId, Depends(auth.authorize_request)]
 
     @app.post("/pools")
-    async def create_pool(
-        user_id: AuthorizedUser, new_pool: MoneyPool
-    ) -> MoneyPoolIdResponse:
+    async def create_pool(user_id: AuthorizedUser, new_pool: MoneyPool) -> MoneyPoolIdResponse:
         pool_id = await storage.add_pool(user_id=user_id, new_pool=new_pool)
         return {"id": pool_id}
 
@@ -56,9 +54,7 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
 
     @app.post("/transactions")
     async def add_transaction(user_id: AuthorizedUser, transaction: Transaction):
-        money_pool = await storage.load_pool(
-            user_id=user_id, pool_id=transaction.pool_id
-        )
+        money_pool = await storage.load_pool(user_id=user_id, pool_id=transaction.pool_id)
         if money_pool is None:
             raise HTTPException(
                 status_code=400,

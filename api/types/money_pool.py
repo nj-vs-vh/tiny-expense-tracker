@@ -1,6 +1,6 @@
 import pydantic
-from api.types.money_sum import MoneySum
 
+from api.types.money_sum import MoneySum
 
 MoneyPoolId = str
 

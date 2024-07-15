@@ -1,7 +1,7 @@
 import abc
 from typing import Annotated
 
-from fastapi import HTTPException, Header
+from fastapi import Header, HTTPException
 
 from api.types import UserId
 
@@ -17,12 +17,8 @@ class NoAuth(Auth):
 
 
 class DumbSecretHeaderAuth(Auth):
-    async def authorize_request(
-        self, secret: Annotated[str | None, Header()]
-    ) -> UserId:
+    async def authorize_request(self, secret: Annotated[str | None, Header()]) -> UserId:
         if secret == "secret":
             return "secret-header-auth"
         else:
-            raise HTTPException(
-                status_code=403, detail="Missing or invalid auth header"
-            )
+            raise HTTPException(status_code=403, detail="Missing or invalid auth header")

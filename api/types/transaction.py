@@ -1,5 +1,6 @@
-import pydantic
 import datetime
+
+import pydantic
 
 from api.types.currency import Currency
 from api.types.money_pool import MoneyPoolId

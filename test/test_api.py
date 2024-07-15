@@ -1,7 +1,7 @@
 import datetime
-from fastapi.testclient import TestClient
-
 from test.utils import mask_recent_timestamps
+
+from fastapi.testclient import TestClient
 
 
 def test_api(client: TestClient) -> None:

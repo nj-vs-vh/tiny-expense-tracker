@@ -1,5 +1,6 @@
 from decimal import Decimal
 from typing import Self
+
 import pydantic
 
 from api.types.currency import Currency

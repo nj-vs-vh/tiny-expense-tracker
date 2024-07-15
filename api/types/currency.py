@@ -10,9 +10,7 @@ def parse_currency(v: Any) -> CurrencyISO4217:
     if isinstance(v, CurrencyISO4217):
         return v
     if not isinstance(v, str):
-        raise TypeError(
-            f"currency value must be a string containing three-letter ISO2417 code"
-        )
+        raise TypeError(f"currency value must be a string containing three-letter ISO2417 code")
     v = v.upper()
     if v not in CURRENCIES:
         raise ValueError(f"not a valid ISO 4217 code: {v}")

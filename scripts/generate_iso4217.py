@@ -5,16 +5,14 @@
 
 import argparse
 import datetime
-from pathlib import Path
-
 import pprint
 import string
 import xml
 import xml.etree
 import xml.etree.ElementTree
+from pathlib import Path
 
 from api.types.currency_iso4217 import CurrencyISO4217
-
 
 ROOT_DIR = Path(__file__).parent.parent
 ISO_4216_PY = ROOT_DIR / "api/iso4217.py"
@@ -63,6 +61,4 @@ if __name__ == "__main__":
             currencies_by_code[c.code].entities.extend(c.entities)
 
     with open(ISO_4216_PY, "a") as out:
-        out.write(
-            "CURRENCIES = " + pprint.pformat(currencies_by_code, indent=4, width=100)
-        )
+        out.write("CURRENCIES = " + pprint.pformat(currencies_by_code, indent=4, width=100))

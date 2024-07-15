@@ -3,9 +3,9 @@ import asyncio
 import datetime
 import json
 import logging
-from pathlib import Path
 import random
 import time
+from pathlib import Path
 from typing import Literal, TypedDict
 
 import aiohttp
@@ -64,13 +64,9 @@ class RemoteExchangeRates(ExchangeRates):
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.api_url) as resp:
-                    return ExchangeRatesApiResponseValidator.validate_json(
-                        await resp.text()
-                    )
+                    return ExchangeRatesApiResponseValidator.validate_json(await resp.text())
         except Exception:
-            logger.exception(
-                "Error calling exchange rates API, will try to use cached file"
-            )
+            logger.exception("Error calling exchange rates API, will try to use cached file")
 
         try:
             return ExchangeRatesApiResponseValidator.validate_json(
@@ -86,9 +82,7 @@ class RemoteExchangeRates(ExchangeRates):
     async def _periodic_update(self) -> None:
         while True:
             if self._cached_response is not None:
-                sleep_time = (
-                    self._cached_response["time_next_update_unix"] - time.time()
-                )
+                sleep_time = self._cached_response["time_next_update_unix"] - time.time()
                 sleep_time = max(sleep_time, 0)
                 sleep_time += 60 * random.randint(60, 5 * 60)  # add 1 to 5 hours
             else:
@@ -103,6 +97,4 @@ class RemoteExchangeRates(ExchangeRates):
 
     async def initialize(self) -> None:
         await self._load_and_cache_exchange_rates()
-        asyncio.create_task(
-            self._periodic_update(), name="periodic exchange rates update"
-        )
+        asyncio.create_task(self._periodic_update(), name="periodic exchange rates update")

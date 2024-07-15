@@ -20,9 +20,7 @@ class Storage(abc.ABC):
     async def load_pools(self, user_id: UserId) -> dict[MoneyPoolId, MoneyPool]: ...
 
     @abc.abstractmethod
-    async def load_pool(
-        self, user_id: UserId, pool_id: MoneyPoolId
-    ) -> MoneyPool | None: ...
+    async def load_pool(self, user_id: UserId, pool_id: MoneyPoolId) -> MoneyPool | None: ...
 
     @abc.abstractmethod
     async def add_transaction(self, user_id: str, transaction: Transaction) -> None: ...
@@ -52,16 +50,12 @@ class InmemoryStorage(Storage):
         if new_balance.currency not in [s.currency for s in p.balance]:
             p.balance.append(new_balance)
         else:
-            raise ValueError(
-                f"Balance already has currency {new_balance.currency.code}"
-            )
+            raise ValueError(f"Balance already has currency {new_balance.currency.code}")
 
     async def load_pools(self, user_id: UserId) -> dict[MoneyPoolId, MoneyPool]:
         return self._user_pools.get(user_id, {})
 
-    async def load_pool(
-        self, user_id: UserId, pool_id: MoneyPoolId
-    ) -> MoneyPool | None:
+    async def load_pool(self, user_id: UserId, pool_id: MoneyPoolId) -> MoneyPool | None:
         user_pools = await self.load_pools(user_id)
         return user_pools.get(pool_id)
 
@@ -69,9 +63,7 @@ class InmemoryStorage(Storage):
         pool = await self.load_pool(user_id, transaction.pool_id)
         if pool is None:
             raise ValueError("Transaction attributed to non-existent pool")
-        target_sum = next(
-            s for s in pool.balance if s.currency == transaction.sum.currency
-        )
+        target_sum = next(s for s in pool.balance if s.currency == transaction.sum.currency)
         target_sum.amount += transaction.sum.amount
         self._user_transactions.setdefault(user_id, []).append(transaction)
 
