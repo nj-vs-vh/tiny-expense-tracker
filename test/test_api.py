@@ -1,6 +1,8 @@
 import datetime
 from fastapi.testclient import TestClient
 
+from test.utils import mask_recent_timestamps
+
 
 def test_api(client: TestClient) -> None:
     response = client.get("/pools")
@@ -107,5 +109,80 @@ def test_currency_coercion(client: TestClient) -> None:
             "is_diffuse": False,
             "pool_id": pool_id,
             "original_currency": "AMD",
+        },
+    ]
+
+
+def test_sync_balance(client: TestClient) -> None:
+    response = client.post(
+        "/pools",
+        json={
+            "display_name": "my money",
+            "balance": [
+                {"amount": 300, "currency": "USD"},
+                {"amount": 500, "currency": "GEL"},
+                {"amount": 50, "currency": "EUR"},
+            ],
+        },
+    )
+    assert response.status_code == 200
+    pool_id = response.json()["id"]
+
+    response = client.post(
+        f"/sync-balance/{pool_id}",
+        json={
+            "amounts": [290, 490.5, 0],
+        },
+    )
+    assert response.status_code == 200
+
+    response = client.get(f"/pools")
+    assert response.status_code == 200
+    assert response.json() == {
+        pool_id: {
+            "display_name": "my money",
+            "balance": [
+                {"amount": "290.00", "currency": "USD"},
+                {"amount": "490.50", "currency": "GEL"},
+                {"amount": "0.00", "currency": "EUR"},
+            ],
+        }
+    }
+
+    response = client.get("/transactions")
+    assert response.status_code == 200
+    assert mask_recent_timestamps(response.json()) == [
+        {
+            "description": "my money synced 300.00 -> 290.00 USD",
+            "is_diffuse": True,
+            "original_currency": None,
+            "pool_id": pool_id,
+            "sum": {
+                "amount": "-10.00",
+                "currency": "USD",
+            },
+            "timestamp": "<recent timestamp>",
+        },
+        {
+            "description": "my money synced 500.00 -> 490.50 GEL",
+            "is_diffuse": True,
+            "original_currency": None,
+            "pool_id": pool_id,
+            "sum": {
+                "amount": "-9.50",
+                "currency": "GEL",
+            },
+            "timestamp": "<recent timestamp>",
+        },
+        {
+            "description": "my money synced 50.00 -> 0.00 EUR",
+            "is_diffuse": True,
+            "original_currency": None,
+            "pool_id": pool_id,
+            "sum": {
+                "amount": "-50.00",
+                "currency": "EUR",
+            },
+            "timestamp": "<recent timestamp>",
         },
     ]
