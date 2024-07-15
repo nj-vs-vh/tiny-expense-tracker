@@ -75,11 +75,11 @@ def test_currency_coercion(client: TestClient) -> None:
     assert response.status_code == 200
     pool_id = response.json()["id"]
 
-    dt = datetime.datetime.now().isoformat()
+    dt = datetime.datetime.now()
     response = client.post(
         "/transactions",
         json={
-            "timestamp": dt,
+            "timestamp": dt.isoformat(),
             "sum": {"amount": -100, "currency": "AMD"},
             "pool_id": pool_id,
             "description": "payment in Armenian Drams",
@@ -100,7 +100,7 @@ def test_currency_coercion(client: TestClient) -> None:
     assert response.status_code == 200
     assert response.json() == [
         {
-            "timestamp": dt,
+            "timestamp": dt.timestamp(),
             "sum": {
                 "amount": "-100.00",
                 "currency": "USD",

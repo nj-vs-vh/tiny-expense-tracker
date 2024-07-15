@@ -31,7 +31,8 @@ async def coerce_to_pool(
         target=pool.balance[0].currency,
     )
     transaction.sum = MoneySum(
-        amount=float(transaction.sum.amount) * rate.rate,  # conversion back to decimal is handled by validator
+        amount=float(transaction.sum.amount)
+        * rate.rate,  # conversion back to decimal is handled by validator
         currency=rate.target,
     )
 

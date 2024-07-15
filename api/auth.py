@@ -1,6 +1,12 @@
 import abc
+import base64
 from typing import Annotated
 
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from fastapi import Header, HTTPException
 
 from api.types import UserId
@@ -22,3 +28,40 @@ class DumbSecretHeaderAuth(Auth):
             return "secret-header-auth"
         else:
             raise HTTPException(status_code=403, detail="Missing or invalid auth header")
+
+
+class RSAAuth(Auth):
+    def __init__(self, public_keys: list[bytes]) -> None:
+        loaded_keys = [load_pem_public_key(k) for k in public_keys]
+        if not all(isinstance(k, RSAPublicKey) for k in loaded_keys):
+            raise ValueError("All public keys must be RSA")
+        self.public_keys: list[RSAPublicKey] = loaded_keys
+
+    async def authorize_request(
+        self,
+        user_id: Annotated[str, Header()],
+        signature: Annotated[str, Header(title="Base64-encoded RSA signature for user id")],
+    ) -> UserId:
+        try:
+            signature_bytes = base64.b64decode(signature)
+        except Exception:
+            raise HTTPException(
+                400,
+                detail="Signature header must contain base64-encoded signature",
+            )
+        message = user_id.encode("utf-8")
+        for public_key in self.public_keys:
+            try:
+                public_key.verify(
+                    signature=signature_bytes,
+                    data=message,
+                    padding=padding.PSS(
+                        mgf=padding.MGF1(hashes.SHA256()),
+                        salt_length=padding.PSS.MAX_LENGTH,
+                    ),
+                    algorithm=hashes.SHA256(),
+                )
+                return user_id
+            except InvalidSignature:
+                pass
+        raise HTTPException(403, detail="Invalid signature")

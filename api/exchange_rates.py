@@ -2,10 +2,10 @@ import abc
 import asyncio
 import datetime
 import json
-from locale import currency
 import logging
 import random
 import time
+from locale import currency
 from pathlib import Path
 from typing import Literal, TypedDict
 
