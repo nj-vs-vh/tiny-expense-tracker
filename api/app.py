@@ -53,6 +53,10 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
 
     AuthorizedUser = Annotated[UserId, Depends(auth.authorize_request)]
 
+    @app.post("/")
+    async def ping() -> dict[str, str]:
+        return {"message": "Hi"}
+
     @app.post("/pools")
     async def create_pool(user_id: AuthorizedUser, new_pool: MoneyPool) -> MoneyPoolIdResponse:
         pool_id = await storage.add_pool(user_id=user_id, new_pool=new_pool)
