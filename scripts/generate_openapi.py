@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+
 from api.app import create_app
 from api.auth import NoAuth
 from api.exchange_rates import DumbExchangeRates

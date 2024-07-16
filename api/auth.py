@@ -65,3 +65,17 @@ class RSAAuth(Auth):
             except InvalidSignature:
                 pass
         raise HTTPException(403, detail="Invalid signature")
+
+
+class TokenAuth(Auth):
+    def __init__(self, server_tokens: list[str]) -> None:
+        self.server_tokens = server_tokens
+
+    async def authorize_request(
+        self, user_id: Annotated[str, Header()], token: Annotated[str, Header()]
+    ) -> UserId:
+        if any(token == server_token for server_token in self.server_tokens):
+            return user_id
+            # TODO: client token auth
+        else:
+            raise HTTPException(403, detail="Invalid token")
