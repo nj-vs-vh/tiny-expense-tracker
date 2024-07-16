@@ -1,0 +1,527 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "FastAPI",
+        "version": "0.1.0"
+    },
+    "paths": {
+        "/pools": {
+            "get": {
+                "summary": "Get Pools",
+                "operationId": "get_pools_pools_get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": {
+                                        "$ref": "#/components/schemas/MoneyPool-Output"
+                                    },
+                                    "type": "object",
+                                    "title": "Response Get Pools Pools Get"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "summary": "Create Pool",
+                "operationId": "create_pool_pools_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MoneyPool-Input"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MoneyPoolIdResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/pools/{pool_id}": {
+            "get": {
+                "summary": "Get Specific Pool",
+                "operationId": "get_specific_pool_pools__pool_id__get",
+                "parameters": [
+                    {
+                        "name": "pool_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Pool Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MoneyPool-Output"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/transactions": {
+            "post": {
+                "summary": "Add Transaction",
+                "operationId": "add_transaction_transactions_post",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Transaction-Input"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "get": {
+                "summary": "Get Transactions",
+                "operationId": "get_transactions_transactions_get",
+                "parameters": [
+                    {
+                        "name": "offset",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0,
+                            "title": "Offset"
+                        }
+                    },
+                    {
+                        "name": "count",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "maximum": 200,
+                            "minimum": 1,
+                            "default": 10,
+                            "title": "Count"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/Transaction-Output"
+                                    },
+                                    "title": "Response Get Transactions Transactions Get"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sync-balance/{pool_id}": {
+            "post": {
+                "summary": "Sync Pool Balance",
+                "operationId": "sync_pool_balance_sync_balance__pool_id__post",
+                "parameters": [
+                    {
+                        "name": "pool_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Pool Id"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SyncBalanceRequestBody"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "string",
+                                    "title": "Response Sync Pool Balance Sync Balance  Pool Id  Post"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "CurrencyISO4217": {
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "title": "Code"
+                    },
+                    "numeric_code": {
+                        "type": "integer",
+                        "title": "Numeric Code"
+                    },
+                    "name": {
+                        "type": "string",
+                        "title": "Name"
+                    },
+                    "entities": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array",
+                        "title": "Entities"
+                    },
+                    "precision": {
+                        "type": "integer",
+                        "title": "Precision"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "code",
+                    "numeric_code",
+                    "name",
+                    "entities",
+                    "precision"
+                ],
+                "title": "CurrencyISO4217"
+            },
+            "HTTPValidationError": {
+                "properties": {
+                    "detail": {
+                        "items": {
+                            "$ref": "#/components/schemas/ValidationError"
+                        },
+                        "type": "array",
+                        "title": "Detail"
+                    }
+                },
+                "type": "object",
+                "title": "HTTPValidationError"
+            },
+            "MoneyPool-Input": {
+                "properties": {
+                    "display_name": {
+                        "type": "string",
+                        "title": "Display Name"
+                    },
+                    "balance": {
+                        "items": {
+                            "$ref": "#/components/schemas/MoneySum-Input"
+                        },
+                        "type": "array",
+                        "title": "Balance"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "display_name",
+                    "balance"
+                ],
+                "title": "MoneyPool"
+            },
+            "MoneyPool-Output": {
+                "properties": {
+                    "display_name": {
+                        "type": "string",
+                        "title": "Display Name"
+                    },
+                    "balance": {
+                        "items": {
+                            "$ref": "#/components/schemas/MoneySum-Output"
+                        },
+                        "type": "array",
+                        "title": "Balance"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "display_name",
+                    "balance"
+                ],
+                "title": "MoneyPool"
+            },
+            "MoneyPoolIdResponse": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "title": "Id"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "id"
+                ],
+                "title": "MoneyPoolIdResponse"
+            },
+            "MoneySum-Input": {
+                "properties": {
+                    "amount": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ],
+                        "title": "Amount"
+                    },
+                    "currency": {
+                        "type": "string"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "amount",
+                    "currency"
+                ],
+                "title": "MoneySum"
+            },
+            "MoneySum-Output": {
+                "properties": {
+                    "amount": {
+                        "type": "string",
+                        "title": "Amount"
+                    },
+                    "currency": {
+                        "type": "string"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "amount",
+                    "currency"
+                ],
+                "title": "MoneySum"
+            },
+            "SyncBalanceRequestBody": {
+                "properties": {
+                    "amounts": {
+                        "items": {
+                            "type": "number"
+                        },
+                        "type": "array",
+                        "title": "Amounts"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "amounts"
+                ],
+                "title": "SyncBalanceRequestBody"
+            },
+            "Transaction-Input": {
+                "properties": {
+                    "sum": {
+                        "$ref": "#/components/schemas/MoneySum-Input"
+                    },
+                    "pool_id": {
+                        "type": "string",
+                        "title": "Pool Id"
+                    },
+                    "description": {
+                        "type": "string",
+                        "title": "Description"
+                    },
+                    "timestamp": {
+                        "type": "number",
+                        "title": "Timestamp"
+                    },
+                    "is_diffuse": {
+                        "type": "boolean",
+                        "title": "Is Diffuse",
+                        "default": false
+                    },
+                    "original_currency": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "sum",
+                    "pool_id",
+                    "description"
+                ],
+                "title": "Transaction"
+            },
+            "Transaction-Output": {
+                "properties": {
+                    "sum": {
+                        "$ref": "#/components/schemas/MoneySum-Output"
+                    },
+                    "pool_id": {
+                        "type": "string",
+                        "title": "Pool Id"
+                    },
+                    "description": {
+                        "type": "string",
+                        "title": "Description"
+                    },
+                    "timestamp": {
+                        "type": "number",
+                        "title": "Timestamp"
+                    },
+                    "is_diffuse": {
+                        "type": "boolean",
+                        "title": "Is Diffuse",
+                        "default": false
+                    },
+                    "original_currency": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "sum",
+                    "pool_id",
+                    "description"
+                ],
+                "title": "Transaction"
+            },
+            "ValidationError": {
+                "properties": {
+                    "loc": {
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "integer"
+                                }
+                            ]
+                        },
+                        "type": "array",
+                        "title": "Location"
+                    },
+                    "msg": {
+                        "type": "string",
+                        "title": "Message"
+                    },
+                    "type": {
+                        "type": "string",
+                        "title": "Error Type"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "loc",
+                    "msg",
+                    "type"
+                ],
+                "title": "ValidationError"
+            }
+        }
+    }
+}
