@@ -5,8 +5,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from api.app import create_app
-from api.auth import NoAuth, TokenAuth
-from api.exchange_rates import DumbExchangeRates, RemoteExchangeRates
+from api.auth import TokenAuth
+from api.exchange_rates import RemoteExchangeRates
 from api.storage import MongoDbStorage
 
 load_dotenv()
