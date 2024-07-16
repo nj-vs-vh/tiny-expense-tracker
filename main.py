@@ -14,7 +14,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(levelname)-10s%(asctime)s %(name)s: %(message)s",
 )
-logging.info("TEST")
 
 app = create_app(
     storage=MongoDbStorage(url=os.environ["MONGODB_URL"]),  # type: ignore
