@@ -53,7 +53,7 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
 
     AuthorizedUser = Annotated[UserId, Depends(auth.authorize_request)]
 
-    @app.post("/")
+    @app.get("/")
     async def ping() -> dict[str, str]:
         return {"message": "Hi"}
 
