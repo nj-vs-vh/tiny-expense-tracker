@@ -49,7 +49,7 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
         yield
         logger.info("Nothing to cleanup, bye")
 
-    app = FastAPI(lifespan=lifespan)
+    app = FastAPI(title="tiny-expense-tracker-api", lifespan=lifespan)
 
     AuthorizedUser = Annotated[UserId, Depends(auth.authorize_request)]
 
