@@ -3,8 +3,6 @@ import pydantic
 from api.types.money_sum import MoneySum
 from api.types.transaction import Transaction
 
-MoneyPoolId = str
-
 
 class MoneyPool(pydantic.BaseModel):
     display_name: str

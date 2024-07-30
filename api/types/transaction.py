@@ -2,12 +2,10 @@ import datetime
 
 import pydantic
 
-from api.types import MoneyPoolId
 from api.types.currency import Currency
 from api.types.datetime import Datetime
+from api.types.ids import MoneyPoolId
 from api.types.money_sum import MoneySum
-
-TransactionId = str
 
 
 class Transaction(pydantic.BaseModel):

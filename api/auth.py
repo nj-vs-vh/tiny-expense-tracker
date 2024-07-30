@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from fastapi import Header, HTTPException
 
-from api.types import UserId
+from api.types.ids import UserId
 
 
 class Auth(abc.ABC):

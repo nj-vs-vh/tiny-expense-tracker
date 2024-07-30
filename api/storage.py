@@ -13,7 +13,7 @@ from motor.motor_asyncio import (
     AsyncIOMotorCollection,
 )
 
-from api.types import MoneyPoolId, UserId
+from api.types.ids import MoneyPoolId, UserId
 from api.types.money_pool import MoneyPool
 from api.types.money_sum import MoneySum
 from api.types.transaction import Transaction, TransactionFilter

@@ -9,7 +9,8 @@ from fastapi import Depends, FastAPI, HTTPException
 from api.auth import Auth
 from api.exchange_rates import ExchangeRates
 from api.storage import Storage
-from api.types import MoneyPoolId, MoneyPoolIdResponse, SyncBalanceRequestBody, UserId
+from api.types.api import MoneyPoolIdResponse, SyncBalanceRequestBody
+from api.types.ids import MoneyPoolId, UserId
 from api.types.money_pool import MoneyPool
 from api.types.money_sum import MoneySum
 from api.types.transaction import Transaction
@@ -84,6 +85,14 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
             )
         await coerce_to_pool(transaction, money_pool, exchange_rates)
         await storage.add_transaction(user_id=user_id, transaction=transaction)
+
+    @app.get("/transactions")
+    async def get_transactions(
+        user_id: AuthorizedUser, offset: Offset = 0, count: Count = 10
+    ) -> list[Transaction]:
+        return await storage.load_transactions(
+            user_id=user_id, filter=None, offset=offset, count=count
+        )
 
     @app.get("/transactions")
     async def get_transactions(
