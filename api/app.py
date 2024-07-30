@@ -1,15 +1,17 @@
 import datetime
 import logging
 from contextlib import asynccontextmanager
-from typing import Annotated
+from decimal import Decimal
+from typing import Annotated, Literal
 
 import pydantic
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import PlainTextResponse
 
 from api.auth import Auth
 from api.exchange_rates import ExchangeRates
 from api.storage import Storage
-from api.types.api import MoneyPoolIdResponse, SyncBalanceRequestBody
+from api.types.api import MoneyPoolIdResponse, SyncBalanceRequestBody, TransferMoneyRequestBody
 from api.types.ids import MoneyPoolId, UserId
 from api.types.money_pool import MoneyPool
 from api.types.money_sum import MoneySum
@@ -19,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 Offset = Annotated[int, pydantic.Field(ge=0)]
 Count = Annotated[int, pydantic.Field(ge=1, le=200)]
+
+Ok = Literal["OK"]
 
 
 async def coerce_to_pool(
@@ -32,8 +36,7 @@ async def coerce_to_pool(
         target=pool.balance[0].currency,
     )
     transaction.sum = MoneySum(
-        amount=float(transaction.sum.amount)
-        * rate.rate,  # conversion back to decimal is handled by validator
+        amount=Decimal(float(transaction.sum.amount) * rate.rate),
         currency=rate.target,
     )
 
@@ -75,8 +78,8 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
         else:
             return pool
 
-    @app.post("/transactions")
-    async def add_transaction(user_id: AuthorizedUser, transaction: Transaction):
+    @app.post("/transactions", response_class=PlainTextResponse)
+    async def add_transaction(user_id: AuthorizedUser, transaction: Transaction) -> Ok:
         money_pool = await storage.load_pool(user_id=user_id, pool_id=transaction.pool_id)
         if money_pool is None:
             raise HTTPException(
@@ -85,6 +88,7 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
             )
         await coerce_to_pool(transaction, money_pool, exchange_rates)
         await storage.add_transaction(user_id=user_id, transaction=transaction)
+        return "OK"
 
     @app.get("/transactions")
     async def get_transactions(
@@ -94,18 +98,60 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
             user_id=user_id, filter=None, offset=offset, count=count
         )
 
-    @app.get("/transactions")
-    async def get_transactions(
-        user_id: AuthorizedUser, offset: Offset = 0, count: Count = 10
-    ) -> list[Transaction]:
-        return await storage.load_transactions(
-            user_id=user_id, filter=None, offset=offset, count=count
-        )
+    @app.post("/transfer", response_class=PlainTextResponse)
+    async def make_transfer(user_id: AuthorizedUser, body: TransferMoneyRequestBody) -> Ok:
+        if body.sum.amount.is_zero():
+            raise HTTPException(status_code=400, detail="Transfer amount can't be zero")
 
-    @app.post("/sync-balance/{pool_id}")
+        from_pool = await storage.load_pool(user_id=user_id, pool_id=body.from_pool)
+        to_pool = await storage.load_pool(user_id=user_id, pool_id=body.to_pool)
+        if from_pool is None or to_pool is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Transfer from/to non-existent pool(s)",
+            )
+
+        added = body.sum
+        added.amount = abs(added.amount)
+        deducted = MoneySum(amount=-added.amount, currency=added.currency)
+
+        transaction_deduct = Transaction(
+            sum=deducted,
+            pool_id=body.from_pool,
+            # NOTE: not a bug - use the positive amount for display
+            description=f"Transfer {added} to {to_pool.display_name} ({body.description})",
+        )
+        await coerce_to_pool(transaction_deduct, from_pool, exchange_rates)
+        transaction_add = Transaction(
+            sum=added,
+            pool_id=body.to_pool,
+            description=f"Transfer {added} from {from_pool.display_name} ({body.description})",
+        )
+        await coerce_to_pool(transaction_add, to_pool, exchange_rates)
+
+        transaction_deduct_id = await storage.add_transaction(user_id, transaction_deduct)
+        try:
+            await storage.add_transaction(user_id, transaction_add)
+        except Exception:
+            logger.exception("Error making second transaction, trying to revert the first")
+            try:
+                if await storage.delete_transaction(user_id, transaction_id=transaction_deduct_id):
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Failed to make the transfer, but the state should be consistent",
+                    )
+            except Exception:
+                logger.exception("Error deleting first transaction, the state is inconsistent")
+            raise HTTPException(
+                status_code=503,
+                detail="Failed to make the transfer and the state might be inconsisten",
+            )
+        return "OK"
+
+    @app.post("/sync-balance/{pool_id}", response_class=PlainTextResponse)
     async def sync_pool_balance(
         user_id: AuthorizedUser, pool_id: str, body: SyncBalanceRequestBody
-    ) -> str:
+    ) -> Ok:
         pool = await storage.load_pool(user_id, pool_id)
         if pool is None:
             raise HTTPException(404, detail="Pool not found")
@@ -117,7 +163,7 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
 
         errors: list[Exception] = []
         for old_sum, new_amount in zip(pool.balance, body.amounts):
-            new_sum = MoneySum(amount=new_amount, currency=old_sum.currency)
+            new_sum = MoneySum(amount=Decimal(new_amount), currency=old_sum.currency)
             delta = new_sum.amount - old_sum.amount
             if not delta:
                 continue

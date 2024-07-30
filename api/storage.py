@@ -1,4 +1,5 @@
 import abc
+import copy
 import logging
 import time
 import uuid
@@ -13,7 +14,7 @@ from motor.motor_asyncio import (
     AsyncIOMotorCollection,
 )
 
-from api.types.ids import MoneyPoolId, UserId
+from api.types.ids import MoneyPoolId, TransactionId, UserId
 from api.types.money_pool import MoneyPool
 from api.types.money_sum import MoneySum
 from api.types.transaction import Transaction, TransactionFilter
@@ -38,19 +39,22 @@ class Storage(abc.ABC):
     async def load_pool(self, user_id: UserId, pool_id: MoneyPoolId) -> MoneyPool | None: ...
 
     @abc.abstractmethod
-    async def add_transaction(self, user_id: str, transaction: Transaction) -> None: ...
+    async def add_transaction(self, user_id: str, transaction: Transaction) -> TransactionId: ...
 
     @abc.abstractmethod
     async def load_transactions(
         self, user_id: UserId, filter: TransactionFilter | None, offset: int, count: int
     ) -> list[Transaction]: ...
 
+    @abc.abstractmethod
+    async def delete_transaction(self, user_id: UserId, transaction_id: TransactionId) -> bool: ...
+
 
 class InmemoryStorage(Storage):
     """Lacks synchronization, only for testing purposes"""
 
     def __init__(self) -> None:
-        self._user_transactions: dict[UserId, list[Transaction]] = {}
+        self._user_transactions: dict[UserId, list[tuple[str, Transaction]]] = {}
         self._user_pools: dict[UserId, dict[MoneyPoolId, MoneyPool]] = {}
 
     async def add_pool(self, user_id: UserId, new_pool: MoneyPool) -> MoneyPoolId:
@@ -63,9 +67,10 @@ class InmemoryStorage(Storage):
     ) -> bool:
         p = await self.load_pool(user_id, pool_id)
         if p is None:
-            return None
+            return False
         if new_balance.currency not in [s.currency for s in p.balance]:
             p.balance.append(new_balance)
+            return True
         else:
             raise ValueError(f"Balance already has currency {new_balance.currency.code}")
 
@@ -76,22 +81,41 @@ class InmemoryStorage(Storage):
         user_pools = await self.load_pools(user_id)
         return user_pools.get(pool_id)
 
-    async def add_transaction(self, user_id: str, transaction: Transaction) -> None:
+    async def add_transaction(self, user_id: str, transaction: Transaction) -> TransactionId:
         pool = await self.load_pool(user_id, transaction.pool_id)
         if pool is None:
             raise ValueError("Transaction attributed to non-existent pool")
         pool.update_with_transaction(transaction)
-        self._user_transactions.setdefault(user_id, []).append(transaction)
+        transaction_id = str(uuid.uuid4())
+        self._user_transactions.setdefault(user_id, []).append((transaction_id, transaction))
+        return transaction_id
 
     async def load_transactions(
         self, user_id: UserId, filter: TransactionFilter | None, offset: int, count: int
     ) -> list[Transaction]:
         transactions = self._user_transactions.get(user_id, [])
         if filter is not None:
-            transactions = [t for t in transactions if filter.matches(t)]
+            transactions = [(tid, t) for tid, t in transactions if filter.matches(t)]
         end = len(transactions) - offset
         start = end - count - 1
-        return transactions[start:end]
+        return [t for _, t in transactions[start:end]]
+
+    async def delete_transaction(self, user_id: UserId, transaction_id: TransactionId) -> bool:
+        user_transactions = self._user_transactions.get(user_id, [])
+        matching_transactions = [t for tid, t in user_transactions if tid == transaction_id]
+        if not matching_transactions:
+            return False
+
+        deleted = matching_transactions[0]
+        deleted = copy.deepcopy(deleted)
+        deleted.sum.amount = -deleted.sum.amount  # invert for pool updating purpose
+        pool = await self.load_pool(user_id, deleted.pool_id)
+        assert pool is not None
+        pool.update_with_transaction(deleted)
+        self._user_transactions[user_id] = [
+            (tid, t) for tid, t in user_transactions if tid != transaction_id
+        ]
+        return True
 
 
 class MongoStoredModel(pydantic.BaseModel):
@@ -115,8 +139,8 @@ class OwnedTransaction(MongoStoredModel):
 
 class MongoDbStorage(Storage):
     def __init__(self, url: str) -> None:
-        self.client = AsyncIOMotorClient(url)
-        self.logger = logging.getLogger(f"{__name__}.{__class__.__name__}")
+        self.client: AsyncIOMotorClient = AsyncIOMotorClient(url)
+        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         db = "tiny-expense-tracker"
         self.transactions_coll: AsyncIOMotorCollection = self.client[db].transactions
         self.pools_coll: AsyncIOMotorCollection = self.client[db].pools
@@ -165,27 +189,34 @@ class MongoDbStorage(Storage):
         )
         return result.modified_count == 1
 
-    async def add_transaction(self, user_id: UserId, transaction: Transaction) -> None:
-        async def internal(session: AsyncIOMotorClientSession) -> None:
+    async def _update_pool_internal(
+        self,
+        user_id: UserId,
+        pool: MoneyPool,
+        transaction: Transaction,
+        session: AsyncIOMotorClientSession | None,
+    ):
+        new_sum_idx_in_balance, new_sum = pool.update_with_transaction(transaction)
+        await self.pools_coll.update_one(
+            self._pool_filter(user_id, transaction.pool_id),
+            {"$set": {f"pool.balance.{new_sum_idx_in_balance}": new_sum.model_dump(mode="json")}},
+            session=session,
+        )
+
+    async def add_transaction(self, user_id: UserId, transaction: Transaction) -> TransactionId:
+        async def internal(session: AsyncIOMotorClientSession) -> TransactionId:
             pool = await self._load_pool_internal(user_id, transaction.pool_id, session=session)
             if pool is None:
-                return
-            new_sum_idx_in_balance, new_sum = pool.update_with_transaction(transaction)
-            await self.pools_coll.update_one(
-                self._pool_filter(user_id, transaction.pool_id),
-                {
-                    "$set": {
-                        f"pool.balance.{new_sum_idx_in_balance}": new_sum.model_dump(mode="json")
-                    }
-                },
-            )
-            await self.transactions_coll.insert_one(
+                raise ValueError("Attempt to add transaction to a non-existing pool")
+            await self._update_pool_internal(user_id, pool, transaction, session=session)
+            result = await self.transactions_coll.insert_one(
                 OwnedTransaction(transaction=transaction, owner=user_id).model_dump(mode="json"),
                 session=session,
             )
+            return result.inserted_id
 
         async with await self.client.start_session() as session:
-            await session.with_transaction(internal)
+            return await session.with_transaction(internal)
 
     async def load_transactions(
         self, user_id: UserId, filter: TransactionFilter | None, offset: int, count: int
@@ -200,3 +231,25 @@ class MongoDbStorage(Storage):
             .to_list(length=count)
         )
         return [OwnedTransaction.from_mongo(d).transaction for d in docs]
+
+    async def delete_transaction(self, user_id: MoneyPoolId, transaction_id: MoneyPoolId) -> bool:
+        async def internal(session: AsyncIOMotorClientSession) -> bool:
+            result = await self.transactions_coll.delete_one(
+                {"_id": transaction_id}, session=session
+            )
+            if result.deleted_count == 0:
+                return False
+            deleted = OwnedTransaction.from_mongo(result.raw_result)
+            inverse_transaction = copy.deepcopy(deleted.transaction)
+            inverse_transaction.sum.amount = -inverse_transaction.sum.amount
+
+            pool = await self._load_pool_internal(
+                user_id, inverse_transaction.pool_id, session=session
+            )
+            if pool is None:
+                return False
+            await self._update_pool_internal(user_id, pool, inverse_transaction, session=session)
+            return True
+
+        async with await self.client.start_session() as session:
+            return await session.with_transaction(internal)

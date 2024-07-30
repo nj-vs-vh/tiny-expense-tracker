@@ -17,7 +17,7 @@ class CurrencyISO4217:
             return self.code == other.code
         return False
 
-    def __hash__(self) -> str:
+    def __hash__(self) -> int:
         return hash(self.code)
 
     def __str__(self) -> str:

@@ -1,5 +1,5 @@
 import datetime
-from test.utils import mask_recent_timestamps
+from test.utils import RECENT_TIMESTAMP, mask_recent_timestamps
 
 from fastapi.testclient import TestClient
 
@@ -184,5 +184,67 @@ def test_sync_balance(client: TestClient) -> None:
                 "currency": "EUR",
             },
             "timestamp": "<recent timestamp>",
+        },
+    ]
+
+
+def test_transfer_between_pools(client: TestClient) -> None:
+    response = client.post(
+        "/pools",
+        json={"display_name": "debit card", "balance": [{"amount": 300, "currency": "USD"}]},
+    )
+    assert response.status_code == 200
+    pool1_id = response.json()["id"]
+
+    response = client.post(
+        "/pools",
+        json={"display_name": "cash", "balance": [{"amount": 0, "currency": "USD"}]},
+    )
+    assert response.status_code == 200
+    pool2_id = response.json()["id"]
+
+    response = client.post(
+        "/transfer",
+        json={
+            "from_pool": pool1_id,
+            "to_pool": pool2_id,
+            "sum": {"amount": 100, "currency": "USD"},
+            "description": "got some cash",
+        },
+    )
+    assert response.status_code == 200
+    assert response.text == "OK"
+
+    response = client.get("/pools")
+    assert response.status_code == 200
+    assert response.json() == {
+        pool1_id: {
+            "display_name": "debit card",
+            "balance": [{"amount": "200.00", "currency": "USD"}],
+        },
+        pool2_id: {
+            "display_name": "cash",
+            "balance": [{"amount": "100.00", "currency": "USD"}],
+        },
+    }
+
+    response = client.get("/transactions")
+    assert response.status_code == 200
+    assert mask_recent_timestamps(response.json()) == [
+        {
+            "sum": {"amount": "-100.00", "currency": "USD"},
+            "pool_id": pool1_id,
+            "description": "Transfer 100.00 USD to cash (got some cash)",
+            "timestamp": RECENT_TIMESTAMP,
+            "is_diffuse": False,
+            "original_currency": None,
+        },
+        {
+            "sum": {"amount": "100.00", "currency": "USD"},
+            "pool_id": pool2_id,
+            "description": "Transfer 100.00 USD from debit card (got some cash)",
+            "timestamp": RECENT_TIMESTAMP,
+            "is_diffuse": False,
+            "original_currency": None,
         },
     ]

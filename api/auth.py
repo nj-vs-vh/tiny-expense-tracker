@@ -35,7 +35,7 @@ class RSAAuth(Auth):
         loaded_keys = [load_pem_public_key(k) for k in public_keys]
         if not all(isinstance(k, RSAPublicKey) for k in loaded_keys):
             raise ValueError("All public keys must be RSA")
-        self.public_keys: list[RSAPublicKey] = loaded_keys
+        self.public_keys: list[RSAPublicKey] = loaded_keys  # type: ignore
 
     async def authorize_request(
         self,

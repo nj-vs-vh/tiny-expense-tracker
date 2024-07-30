@@ -18,3 +18,4 @@ class TransferMoneyRequestBody(pydantic.BaseModel):
     from_pool: MoneyPoolId
     to_pool: MoneyPoolId
     sum: MoneySum
+    description: str

@@ -69,7 +69,7 @@ class RemoteExchangeRates(ExchangeRates):
             else []
         )
 
-    async def update_exchange_rates(self, base: Currency) -> list[ExchangeRate] | None:
+    async def update_exchange_rates(self, base: Currency) -> None:
         logger.info(f"Updating exchange rates from {base}")
         try:
             async with aiohttp.ClientSession() as session:
@@ -100,13 +100,13 @@ class RemoteExchangeRates(ExchangeRates):
                     merged_rates.sort(key=lambda er: er.updated_on, reverse=True)
                     filtered_rates: list[ExchangeRate] = []
                     seen_pairs: set[tuple[Currency, Currency]] = set()
-                    for rate in merged_rates:
-                        pair = (rate.base, rate.target)
+                    for exchange_rate in merged_rates:
+                        pair = (exchange_rate.base, exchange_rate.target)
                         if pair in seen_pairs:
                             continue
                         else:
                             seen_pairs.add(pair)
-                            filtered_rates.append(rate)
+                            filtered_rates.append(exchange_rate)
                     self._cached_rates = filtered_rates
                     logger.exception(f"Cached rates updated, saving on disk")
                     self.cache_file_path.write_bytes(
