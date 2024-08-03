@@ -98,6 +98,13 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
             user_id=user_id, filter=None, offset=offset, count=count
         )
 
+    @app.delete("/transactions/{transaction_id}", response_class=PlainTextResponse)
+    async def delete_transaction(user_id: AuthorizedUser, transaction_id: str) -> Ok:
+        if await storage.delete_transaction(user_id=user_id, transaction_id=transaction_id):
+            return "OK"
+        else:
+            raise HTTPException(status_code=404, detail="No such transaction")
+
     @app.post("/transfer", response_class=PlainTextResponse)
     async def make_transfer(user_id: AuthorizedUser, body: TransferMoneyRequestBody) -> Ok:
         if body.sum.amount.is_zero():
