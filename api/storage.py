@@ -247,7 +247,7 @@ class MongoDbStorage(Storage):
     async def delete_transaction(self, user_id: MoneyPoolId, transaction_id: MoneyPoolId) -> bool:
         async def internal(session: AsyncIOMotorClientSession) -> bool:
             result = await self.transactions_coll.delete_one(
-                {"_id": transaction_id}, session=session
+                {"_id": ObjectId(transaction_id)}, session=session
             )
             if result.deleted_count == 0:
                 return False
