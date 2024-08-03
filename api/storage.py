@@ -3,7 +3,7 @@ import copy
 import logging
 import time
 import uuid
-from typing import Any, Self, Type
+from typing import Annotated, Any, Self, Type
 
 import fastapi
 import pydantic
@@ -118,14 +118,15 @@ class InmemoryStorage(Storage):
         return True
 
 
-class MongoStoredModel(pydantic.BaseModel):
+ObjectIdPydantic = Annotated[
+    str,
+    pydantic.AfterValidator(lambda x: str(ObjectId(x))),
+    pydantic.WithJsonSchema({"type": "string"}),
+]
 
-    @classmethod
-    def from_mongo(cls: Type[Self], raw: Any) -> Self:
-        if isinstance(raw, dict):
-            raw = copy.deepcopy(raw)
-            raw.pop("_id", None)
-        return cls.model_validate(raw)
+
+class MongoStoredModel(pydantic.BaseModel):
+    id: ObjectIdPydantic | None = pydantic.Field(alias="_id", default=None)
 
 
 class OwnedPool(MongoStoredModel):
@@ -136,6 +137,13 @@ class OwnedPool(MongoStoredModel):
 class OwnedTransaction(MongoStoredModel):
     transaction: Transaction
     owner: UserId
+
+    def to_stored_transaction(self) -> StoredTransaction:
+        if self.id is None:
+            raise ValueError(
+                "Attempt to convert non-stored OwnedTransaction (no id attr) to StoredTransaction"
+            )
+        return StoredTransaction.from_transaction(self.transaction, id=self.id)
 
 
 class MongoDbStorage(Storage):
@@ -171,7 +179,7 @@ class MongoDbStorage(Storage):
         doc = await self.pools_coll.find_one(self._pool_filter(user_id, pool_id), session=session)
         if doc is None:
             return None
-        return OwnedPool.from_mongo(doc).pool
+        return OwnedPool.model_validate(doc).pool
 
     async def load_pool(self, user_id: UserId, pool_id: UserId) -> MoneyPool | None:
         return await self._load_pool_internal(user_id, pool_id, session=None)
@@ -179,7 +187,7 @@ class MongoDbStorage(Storage):
     async def load_pools(self, user_id: UserId) -> dict[str, MoneyPool]:
         cursor = self.pools_coll.find({"owner": user_id})
         docs = await cursor.to_list(length=1000)
-        return {str(d["_id"]): OwnedPool.from_mongo(d).pool for d in docs}
+        return {str(d["_id"]): OwnedPool.model_validate(d).pool for d in docs}
 
     async def add_balance_to_pool(
         self, user_id: UserId, pool_id: UserId, new_balance: MoneySum
@@ -233,26 +241,38 @@ class MongoDbStorage(Storage):
             .skip(offset)
             .to_list(length=count)
         )
-        results: list[StoredTransaction] = []
-        for d in docs:
-            ot = OwnedTransaction.from_mongo(d)
-            results.append(
-                StoredTransaction.from_transaction(
-                    t=ot.transaction,
-                    id=str(d["_id"]),
-                )
-            )
-        return results
 
-    async def delete_transaction(self, user_id: MoneyPoolId, transaction_id: MoneyPoolId) -> bool:
+        return [OwnedTransaction.model_validate(d).to_stored_transaction() for d in docs]
+
+    def _transaction_filter(
+        self, user_id: UserId, transaction_id: TransactionId
+    ) -> dict[str, Any]:
+        return {
+            "_id": ObjectId(transaction_id),
+            "owner": user_id,
+        }
+
+    async def _load_transaction_internal(
+        self, user_id: UserId, transaction_id: TransactionId, session: AsyncIOMotorClientSession
+    ) -> OwnedTransaction | None:
+        raw = await self.transactions_coll.find_one(
+            self._transaction_filter(user_id, transaction_id), session=session
+        )
+        return OwnedTransaction.model_validate(raw) if raw else None
+
+    async def delete_transaction(self, user_id: UserId, transaction_id: MoneyPoolId) -> bool:
         async def internal(session: AsyncIOMotorClientSession) -> bool:
+            to_be_deleted = await self._load_transaction_internal(
+                user_id, transaction_id, session=session
+            )
+            if to_be_deleted is None:
+                return False
             result = await self.transactions_coll.delete_one(
-                {"_id": ObjectId(transaction_id)}, session=session
+                self._transaction_filter(user_id, transaction_id), session=session
             )
             if result.deleted_count == 0:
                 return False
-            deleted = OwnedTransaction.from_mongo(result.raw_result)
-            inverse_transaction = copy.deepcopy(deleted.transaction)
+            inverse_transaction = copy.deepcopy(to_be_deleted.transaction)
             inverse_transaction.sum.amount = -inverse_transaction.sum.amount
 
             pool = await self._load_pool_internal(
