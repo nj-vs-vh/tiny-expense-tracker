@@ -1,5 +1,6 @@
 import abc
 import base64
+import logging
 from typing import Annotated
 
 from cryptography.exceptions import InvalidSignature
@@ -10,6 +11,8 @@ from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from fastapi import Header, HTTPException
 
 from api.types.ids import UserId
+
+logger = logging.getLogger(__name__)
 
 
 class Auth(abc.ABC):
@@ -75,7 +78,8 @@ class TokenAuth(Auth):
         self, user_id: Annotated[str, Header()], token: Annotated[str, Header()]
     ) -> UserId:
         if any(token == server_token for server_token in self.server_tokens):
-            return user_id
             # TODO: client token auth
+            logger.info(f"Authorized through server token: {user_id!r}")
+            return user_id
         else:
             raise HTTPException(403, detail="Invalid token")
