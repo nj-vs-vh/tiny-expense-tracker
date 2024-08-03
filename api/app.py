@@ -15,7 +15,7 @@ from api.types.api import MoneyPoolIdResponse, SyncBalanceRequestBody, TransferM
 from api.types.ids import MoneyPoolId, UserId
 from api.types.money_pool import MoneyPool
 from api.types.money_sum import MoneySum
-from api.types.transaction import Transaction
+from api.types.transaction import StoredTransaction, Transaction
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
     @app.get("/transactions")
     async def get_transactions(
         user_id: AuthorizedUser, offset: Offset = 0, count: Count = 10
-    ) -> list[Transaction]:
+    ) -> list[StoredTransaction]:
         return await storage.load_transactions(
             user_id=user_id, filter=None, offset=offset, count=count
         )
@@ -129,13 +129,13 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
         )
         await coerce_to_pool(transaction_add, to_pool, exchange_rates)
 
-        transaction_deduct_id = await storage.add_transaction(user_id, transaction_deduct)
+        deduct_transaction = await storage.add_transaction(user_id, transaction_deduct)
         try:
             await storage.add_transaction(user_id, transaction_add)
         except Exception:
             logger.exception("Error making second transaction, trying to revert the first")
             try:
-                if await storage.delete_transaction(user_id, transaction_id=transaction_deduct_id):
+                if await storage.delete_transaction(user_id, transaction_id=deduct_transaction.id):
                     raise HTTPException(
                         status_code=503,
                         detail="Failed to make the transfer, but the state should be consistent",

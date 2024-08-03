@@ -17,7 +17,7 @@ from motor.motor_asyncio import (
 from api.types.ids import MoneyPoolId, TransactionId, UserId
 from api.types.money_pool import MoneyPool
 from api.types.money_sum import MoneySum
-from api.types.transaction import Transaction, TransactionFilter
+from api.types.transaction import StoredTransaction, Transaction, TransactionFilter
 
 
 class Storage(abc.ABC):
@@ -39,12 +39,14 @@ class Storage(abc.ABC):
     async def load_pool(self, user_id: UserId, pool_id: MoneyPoolId) -> MoneyPool | None: ...
 
     @abc.abstractmethod
-    async def add_transaction(self, user_id: str, transaction: Transaction) -> TransactionId: ...
+    async def add_transaction(
+        self, user_id: str, transaction: Transaction
+    ) -> StoredTransaction: ...
 
     @abc.abstractmethod
     async def load_transactions(
         self, user_id: UserId, filter: TransactionFilter | None, offset: int, count: int
-    ) -> list[Transaction]: ...
+    ) -> list[StoredTransaction]: ...
 
     @abc.abstractmethod
     async def delete_transaction(self, user_id: UserId, transaction_id: TransactionId) -> bool: ...
@@ -54,7 +56,7 @@ class InmemoryStorage(Storage):
     """Lacks synchronization, only for testing purposes"""
 
     def __init__(self) -> None:
-        self._user_transactions: dict[UserId, list[tuple[str, Transaction]]] = {}
+        self._user_transactions: dict[UserId, list[StoredTransaction]] = {}
         self._user_pools: dict[UserId, dict[MoneyPoolId, MoneyPool]] = {}
 
     async def add_pool(self, user_id: UserId, new_pool: MoneyPool) -> MoneyPoolId:
@@ -81,28 +83,28 @@ class InmemoryStorage(Storage):
         user_pools = await self.load_pools(user_id)
         return user_pools.get(pool_id)
 
-    async def add_transaction(self, user_id: str, transaction: Transaction) -> TransactionId:
+    async def add_transaction(self, user_id: str, transaction: Transaction) -> StoredTransaction:
         pool = await self.load_pool(user_id, transaction.pool_id)
         if pool is None:
             raise ValueError("Transaction attributed to non-existent pool")
         pool.update_with_transaction(transaction)
-        transaction_id = str(uuid.uuid4())
-        self._user_transactions.setdefault(user_id, []).append((transaction_id, transaction))
-        return transaction_id
+        stored = StoredTransaction.from_transaction(transaction, id=str(uuid.uuid4()))
+        self._user_transactions.setdefault(user_id, []).append(stored)
+        return stored
 
     async def load_transactions(
         self, user_id: UserId, filter: TransactionFilter | None, offset: int, count: int
-    ) -> list[Transaction]:
+    ) -> list[StoredTransaction]:
         transactions = self._user_transactions.get(user_id, [])
         if filter is not None:
-            transactions = [(tid, t) for tid, t in transactions if filter.matches(t)]
+            transactions = [t for t in transactions if filter.matches(t)]
         end = len(transactions) - offset
         start = end - count - 1
-        return [t for _, t in transactions[start:end]]
+        return transactions[start:end]
 
     async def delete_transaction(self, user_id: UserId, transaction_id: TransactionId) -> bool:
         user_transactions = self._user_transactions.get(user_id, [])
-        matching_transactions = [t for tid, t in user_transactions if tid == transaction_id]
+        matching_transactions = [t for t in user_transactions if t.id == transaction_id]
         if not matching_transactions:
             return False
 
@@ -112,9 +114,7 @@ class InmemoryStorage(Storage):
         pool = await self.load_pool(user_id, deleted.pool_id)
         assert pool is not None
         pool.update_with_transaction(deleted)
-        self._user_transactions[user_id] = [
-            (tid, t) for tid, t in user_transactions if tid != transaction_id
-        ]
+        self._user_transactions[user_id] = [t for t in user_transactions if t.id != transaction_id]
         return True
 
 
@@ -203,8 +203,10 @@ class MongoDbStorage(Storage):
             session=session,
         )
 
-    async def add_transaction(self, user_id: UserId, transaction: Transaction) -> TransactionId:
-        async def internal(session: AsyncIOMotorClientSession) -> TransactionId:
+    async def add_transaction(
+        self, user_id: UserId, transaction: Transaction
+    ) -> StoredTransaction:
+        async def internal(session: AsyncIOMotorClientSession) -> StoredTransaction:
             pool = await self._load_pool_internal(user_id, transaction.pool_id, session=session)
             if pool is None:
                 raise ValueError("Attempt to add transaction to a non-existing pool")
@@ -213,14 +215,14 @@ class MongoDbStorage(Storage):
                 OwnedTransaction(transaction=transaction, owner=user_id).model_dump(mode="json"),
                 session=session,
             )
-            return result.inserted_id
+            return StoredTransaction.from_transaction(transaction, id=str(result.inserted_id))
 
         async with await self.client.start_session() as session:
             return await session.with_transaction(internal)
 
     async def load_transactions(
         self, user_id: UserId, filter: TransactionFilter | None, offset: int, count: int
-    ) -> list[Transaction]:
+    ) -> list[StoredTransaction]:
         docs = (
             await self.transactions_coll.find(
                 {"owner": user_id},
@@ -230,7 +232,18 @@ class MongoDbStorage(Storage):
             .skip(offset)
             .to_list(length=count)
         )
-        return [OwnedTransaction.from_mongo(d).transaction for d in docs]
+        results: list[StoredTransaction] = []
+        for d in docs:
+            ot = OwnedTransaction.from_mongo(d)
+            results.append(
+                StoredTransaction.from_transaction(
+                    t=ot.transaction,
+                    id=str(
+                        d["_id"],
+                    ),
+                )
+            )
+        return results
 
     async def delete_transaction(self, user_id: MoneyPoolId, transaction_id: MoneyPoolId) -> bool:
         async def internal(session: AsyncIOMotorClientSession) -> bool:

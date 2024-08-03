@@ -1,5 +1,5 @@
 import datetime
-from test.utils import RECENT_TIMESTAMP, mask_recent_timestamps
+from test.utils import MASKED_ID, RECENT_TIMESTAMP, mask_ids, mask_recent_timestamps
 
 from fastapi.testclient import TestClient
 
@@ -98,7 +98,7 @@ def test_currency_coercion(client: TestClient) -> None:
 
     response = client.get("/transactions")
     assert response.status_code == 200
-    assert response.json() == [
+    assert mask_ids(response.json()) == [
         {
             "timestamp": dt.timestamp(),
             "sum": {
@@ -109,6 +109,7 @@ def test_currency_coercion(client: TestClient) -> None:
             "is_diffuse": False,
             "pool_id": pool_id,
             "original_currency": "AMD",
+            "id": MASKED_ID,
         },
     ]
 
@@ -151,7 +152,7 @@ def test_sync_balance(client: TestClient) -> None:
 
     response = client.get("/transactions")
     assert response.status_code == 200
-    assert mask_recent_timestamps(response.json()) == [
+    assert mask_ids(mask_recent_timestamps(response.json())) == [
         {
             "description": "my money synced 300.00 -> 290.00 USD",
             "is_diffuse": True,
@@ -161,7 +162,8 @@ def test_sync_balance(client: TestClient) -> None:
                 "amount": "-10.00",
                 "currency": "USD",
             },
-            "timestamp": "<recent timestamp>",
+            "timestamp": RECENT_TIMESTAMP,
+            "id": MASKED_ID,
         },
         {
             "description": "my money synced 500.00 -> 490.50 GEL",
@@ -172,7 +174,8 @@ def test_sync_balance(client: TestClient) -> None:
                 "amount": "-9.50",
                 "currency": "GEL",
             },
-            "timestamp": "<recent timestamp>",
+            "timestamp": RECENT_TIMESTAMP,
+            "id": MASKED_ID,
         },
         {
             "description": "my money synced 50.00 -> 0.00 EUR",
@@ -183,7 +186,8 @@ def test_sync_balance(client: TestClient) -> None:
                 "amount": "-50.00",
                 "currency": "EUR",
             },
-            "timestamp": "<recent timestamp>",
+            "timestamp": RECENT_TIMESTAMP,
+            "id": MASKED_ID,
         },
     ]
 
@@ -230,7 +234,7 @@ def test_transfer_between_pools(client: TestClient) -> None:
 
     response = client.get("/transactions")
     assert response.status_code == 200
-    assert mask_recent_timestamps(response.json()) == [
+    assert mask_ids(mask_recent_timestamps(response.json())) == [
         {
             "sum": {"amount": "-100.00", "currency": "USD"},
             "pool_id": pool1_id,
@@ -238,6 +242,7 @@ def test_transfer_between_pools(client: TestClient) -> None:
             "timestamp": RECENT_TIMESTAMP,
             "is_diffuse": False,
             "original_currency": None,
+            "id": MASKED_ID,
         },
         {
             "sum": {"amount": "100.00", "currency": "USD"},
@@ -246,5 +251,6 @@ def test_transfer_between_pools(client: TestClient) -> None:
             "timestamp": RECENT_TIMESTAMP,
             "is_diffuse": False,
             "original_currency": None,
+            "id": MASKED_ID,
         },
     ]

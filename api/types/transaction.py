@@ -4,7 +4,7 @@ import pydantic
 
 from api.types.currency import Currency
 from api.types.datetime import Datetime
-from api.types.ids import MoneyPoolId
+from api.types.ids import MoneyPoolId, TransactionId
 from api.types.money_sum import MoneySum
 
 
@@ -19,6 +19,14 @@ class Transaction(pydantic.BaseModel):
 
     # for transactions made not in pool's currency
     original_currency: Currency | None = None
+
+
+class StoredTransaction(Transaction):
+    id: TransactionId
+
+    @classmethod
+    def from_transaction(cls, t: Transaction, id: TransactionId) -> "StoredTransaction":
+        return StoredTransaction(id=id, **t.model_dump())
 
 
 class TransactionFilter(pydantic.BaseModel):
