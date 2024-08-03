@@ -234,13 +234,12 @@ class MongoDbStorage(Storage):
         )
         results: list[StoredTransaction] = []
         for d in docs:
+            print(d)
             ot = OwnedTransaction.from_mongo(d)
             results.append(
                 StoredTransaction.from_transaction(
                     t=ot.transaction,
-                    id=str(
-                        d["_id"],
-                    ),
+                    id=str(d["_id"]),
                 )
             )
         return results
