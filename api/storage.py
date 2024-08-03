@@ -118,9 +118,16 @@ class InmemoryStorage(Storage):
         return True
 
 
+def validate_object_id(v: Any) -> str:
+    if isinstance(v, ObjectId):
+        return str(v)
+    else:
+        raise ValueError("Must be an instance of bson.ObjectId class")
+
+
 ObjectIdPydantic = Annotated[
     str,
-    pydantic.AfterValidator(lambda x: str(ObjectId(x))),
+    pydantic.BeforeValidator(validate_object_id),
     pydantic.WithJsonSchema({"type": "string"}),
 ]
 
