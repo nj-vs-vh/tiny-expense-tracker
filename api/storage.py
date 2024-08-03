@@ -123,6 +123,7 @@ class MongoStoredModel(pydantic.BaseModel):
     @classmethod
     def from_mongo(cls: Type[Self], raw: Any) -> Self:
         if isinstance(raw, dict):
+            raw = copy.deepcopy(raw)
             raw.pop("_id", None)
         return cls.model_validate(raw)
 
@@ -234,7 +235,6 @@ class MongoDbStorage(Storage):
         )
         results: list[StoredTransaction] = []
         for d in docs:
-            print(d)
             ot = OwnedTransaction.from_mongo(d)
             results.append(
                 StoredTransaction.from_transaction(
