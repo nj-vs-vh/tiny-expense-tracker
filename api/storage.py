@@ -33,6 +33,11 @@ class Storage(abc.ABC):
     ) -> bool: ...
 
     @abc.abstractmethod
+    async def set_pool_visibility(
+        self, user_id: UserId, pool_id: MoneyPoolId, is_visible: bool
+    ) -> bool: ...
+
+    @abc.abstractmethod
     async def load_pools(self, user_id: UserId) -> dict[MoneyPoolId, MoneyPool]: ...
 
     @abc.abstractmethod
@@ -75,6 +80,15 @@ class InmemoryStorage(Storage):
             return True
         else:
             raise ValueError(f"Balance already has currency {new_balance.currency.code}")
+
+    async def set_pool_visibility(
+        self, user_id: UserId, pool_id: MoneyPoolId, is_visible: bool
+    ) -> bool:
+        p = await self.load_pool(user_id, pool_id)
+        if p is None:
+            return False
+        p.is_visible = is_visible
+        return True
 
     async def load_pools(self, user_id: UserId) -> dict[MoneyPoolId, MoneyPool]:
         return self._user_pools.get(user_id, {})
@@ -202,6 +216,15 @@ class MongoDbStorage(Storage):
         result = await self.pools_coll.update_one(
             self._pool_filter(user_id, pool_id),
             {"$push": {"pool.balance": new_balance.model_dump(mode="json")}},
+        )
+        return result.modified_count == 1
+
+    async def set_pool_visibility(
+        self, user_id: UserId, pool_id: MoneyPoolId, is_visible: bool
+    ) -> bool:
+        result = await self.pools_coll.update_one(
+            self._pool_filter(user_id, pool_id),
+            {"$set": {"pool.is_visible": is_visible}},
         )
         return result.modified_count == 1
 

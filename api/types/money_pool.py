@@ -8,6 +8,8 @@ class MoneyPool(pydantic.BaseModel):
     display_name: str
     balance: list[MoneySum]
 
+    is_visible: bool = True  # default for backwards compatibility
+
     def update_with_transaction(self, transaction: Transaction) -> tuple[int, MoneySum]:
         matching = [
             (idx, s)

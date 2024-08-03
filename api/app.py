@@ -71,12 +71,22 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
         return await storage.load_pools(user_id=user_id)
 
     @app.get("/pools/{pool_id}")
-    async def get_specific_pool(user_id: AuthorizedUser, pool_id: str) -> MoneyPool:
+    async def get_pool(user_id: AuthorizedUser, pool_id: str) -> MoneyPool:
         pool = await storage.load_pool(user_id=user_id, pool_id=pool_id)
         if pool is None:
             raise HTTPException(status_code=404, detail="Pool not found")
         else:
             return pool
+
+    @app.put("/pools/{pool_id}", response_class=PlainTextResponse)
+    async def modify_pool(user_id: AuthorizedUser, pool_id: str, is_visible: bool | None) -> Ok:
+        pool = await storage.load_pool(user_id=user_id, pool_id=pool_id)
+        if pool is None:
+            raise HTTPException(status_code=404, detail="Pool not found")
+        if is_visible is not None:
+            await storage.set_pool_visibility(user_id, pool_id=pool_id, is_visible=is_visible)
+        # nothing more to do
+        return "OK"
 
     @app.post("/transactions", response_class=PlainTextResponse)
     async def add_transaction(user_id: AuthorizedUser, transaction: Transaction) -> Ok:
