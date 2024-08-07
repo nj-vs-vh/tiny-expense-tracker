@@ -5,6 +5,7 @@ import pydantic
 from api.types.ids import MoneyPoolId
 from api.types.money_sum import MoneySum
 from api.types.transaction import Transaction
+from api.types.datetime import Datetime
 
 
 class MoneyPool(pydantic.BaseModel):
@@ -13,7 +14,7 @@ class MoneyPool(pydantic.BaseModel):
 
     # optional fields
     is_visible: bool = True
-    last_updated: datetime.datetime | None = None
+    last_updated: Datetime | None = None
     display_color: str | None = None  # css color for frontend
 
     def update_with_transaction(self, transaction: Transaction) -> tuple[int, MoneySum]:
