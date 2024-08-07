@@ -256,13 +256,13 @@ class MongoDbStorage(Storage):
         session: AsyncIOMotorClientSession | None,
     ):
         new_sum_idx_in_balance, new_sum = pool.update_with_transaction(transaction)
-        update: dict[str, Any] = {
+        mongo_set: dict[str, Any] = {
             f"pool.balance.{new_sum_idx_in_balance}": new_sum.model_dump(mode="json"),
         }
         if pool.last_updated is not None:
-            update["pool.last_updated"] = pool.last_updated.isoformat()
+            mongo_set["pool.last_updated"] = pool.last_updated.isoformat()
         await self.pools_coll.update_one(
-            self._pool_filter(user_id, transaction.pool_id), {"$set": {update}}, session=session
+            self._pool_filter(user_id, transaction.pool_id), {"$set": mongo_set}, session=session
         )
 
     async def add_transaction(
