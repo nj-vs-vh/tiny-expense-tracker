@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 def test_api(client: TestClient) -> None:
     response = client.get("/pools")
     assert response.status_code == 200
-    assert response.json() == {}
+    assert response.json() == []
 
 
 def test_basic_flow(client: TestClient) -> None:
@@ -19,6 +19,7 @@ def test_basic_flow(client: TestClient) -> None:
                 {"amount": 0, "currency": "USD"},
                 {"amount": 10, "currency": "EUR"},
             ],
+            "display_color": "red",
         },
     )
     assert response.status_code == 200
@@ -34,6 +35,10 @@ def test_basic_flow(client: TestClient) -> None:
             {"amount": "0.00", "currency": "USD"},
             {"amount": "10.00", "currency": "EUR"},
         ],
+        "display_color": "red",
+        "id": pool_id,
+        "is_visible": True,
+        "last_updated": None,
     }
 
     response = client.post(
@@ -51,15 +56,19 @@ def test_basic_flow(client: TestClient) -> None:
         f"/pools",
     )
     assert response.status_code == 200
-    assert response.json() == {
-        pool_id: {
+    assert mask_recent_timestamps(response.json()) == [
+        {
             "display_name": "My first pool",
             "balance": [
                 {"amount": "100.00", "currency": "USD"},
                 {"amount": "10.00", "currency": "EUR"},
             ],
+            "display_color": "red",
+            "id": pool_id,
+            "is_visible": True,
+            "last_updated": RECENT_TIMESTAMP,
         }
-    }
+    ]
 
 
 def test_currency_coercion(client: TestClient) -> None:
@@ -89,12 +98,16 @@ def test_currency_coercion(client: TestClient) -> None:
 
     response = client.get(f"/pools")
     assert response.status_code == 200
-    assert response.json() == {
-        pool_id: {
+    assert mask_recent_timestamps(response.json()) == [
+        {
             "display_name": "dollars",
+            "id": pool_id,
             "balance": [{"amount": "200.00", "currency": "USD"}],
+            "display_color": None,
+            "is_visible": True,
+            "last_updated": RECENT_TIMESTAMP,
         }
-    }
+    ]
 
     response = client.get("/transactions")
     assert response.status_code == 200
@@ -139,16 +152,20 @@ def test_sync_balance(client: TestClient) -> None:
 
     response = client.get(f"/pools")
     assert response.status_code == 200
-    assert response.json() == {
-        pool_id: {
+    assert mask_recent_timestamps(response.json()) == [
+        {
             "display_name": "my money",
+            "id": pool_id,
             "balance": [
                 {"amount": "290.00", "currency": "USD"},
                 {"amount": "490.50", "currency": "GEL"},
                 {"amount": "0.00", "currency": "EUR"},
             ],
+            "display_color": None,
+            "is_visible": True,
+            "last_updated": RECENT_TIMESTAMP,
         }
-    }
+    ]
 
     response = client.get("/transactions")
     assert response.status_code == 200
@@ -221,16 +238,24 @@ def test_transfer_between_pools(client: TestClient) -> None:
 
     response = client.get("/pools")
     assert response.status_code == 200
-    assert response.json() == {
-        pool1_id: {
+    assert mask_recent_timestamps(response.json()) == [
+        {
             "display_name": "debit card",
+            "id": pool1_id,
             "balance": [{"amount": "200.00", "currency": "USD"}],
+            "display_color": None,
+            "is_visible": True,
+            "last_updated": RECENT_TIMESTAMP,
         },
-        pool2_id: {
+        {
             "display_name": "cash",
+            "id": pool2_id,
             "balance": [{"amount": "100.00", "currency": "USD"}],
+            "display_color": None,
+            "is_visible": True,
+            "last_updated": RECENT_TIMESTAMP,
         },
-    }
+    ]
 
     response = client.get("/transactions")
     assert response.status_code == 200

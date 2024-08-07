@@ -6,8 +6,10 @@ from api.types.ids import MoneyPoolId
 from api.types.money_sum import MoneySum
 
 
-class MoneyPoolIdResponse(TypedDict):
-    id: MoneyPoolId
+class MoneyPoolAttributesUpdate(pydantic.BaseModel):
+    is_visible: bool | None = None
+    display_name: str | None = None
+    display_color: str | None = None
 
 
 class SyncBalanceRequestBody(pydantic.BaseModel):

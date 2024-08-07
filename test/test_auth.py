@@ -67,7 +67,7 @@ def test_rsa_auth(client_with_rsa_auth: tuple[bytes, TestClient]):
         },
     )
     assert resp.status_code == 200
-    assert resp.json() == {}
+    assert resp.json() == []
 
     resp = client.get("/pools", headers={"user-id": "Another user", "signature": signature})
     assert resp.status_code == 403

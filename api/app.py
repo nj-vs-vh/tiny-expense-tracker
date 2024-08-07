@@ -11,9 +11,13 @@ from fastapi.responses import PlainTextResponse
 from api.auth import Auth
 from api.exchange_rates import ExchangeRates
 from api.storage import Storage
-from api.types.api import MoneyPoolIdResponse, SyncBalanceRequestBody, TransferMoneyRequestBody
+from api.types.api import (
+    MoneyPoolAttributesUpdate,
+    SyncBalanceRequestBody,
+    TransferMoneyRequestBody,
+)
 from api.types.ids import MoneyPoolId, UserId
-from api.types.money_pool import MoneyPool
+from api.types.money_pool import MoneyPool, StoredMoneyPool
 from api.types.money_sum import MoneySum
 from api.types.transaction import StoredTransaction, Transaction
 
@@ -62,16 +66,15 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
         return {"message": "Hi"}
 
     @app.post("/pools")
-    async def create_pool(user_id: AuthorizedUser, new_pool: MoneyPool) -> MoneyPoolIdResponse:
-        pool_id = await storage.add_pool(user_id=user_id, new_pool=new_pool)
-        return {"id": pool_id}
+    async def create_pool(user_id: AuthorizedUser, new_pool: MoneyPool) -> StoredMoneyPool:
+        return await storage.add_pool(user_id=user_id, new_pool=new_pool)
 
     @app.get("/pools")
-    async def get_pools(user_id: AuthorizedUser) -> dict[MoneyPoolId, MoneyPool]:
+    async def get_pools(user_id: AuthorizedUser) -> list[StoredMoneyPool]:
         return await storage.load_pools(user_id=user_id)
 
     @app.get("/pools/{pool_id}")
-    async def get_pool(user_id: AuthorizedUser, pool_id: str) -> MoneyPool:
+    async def get_pool(user_id: AuthorizedUser, pool_id: str) -> StoredMoneyPool:
         pool = await storage.load_pool(user_id=user_id, pool_id=pool_id)
         if pool is None:
             raise HTTPException(status_code=404, detail="Pool not found")
@@ -79,14 +82,13 @@ def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> F
             return pool
 
     @app.put("/pools/{pool_id}", response_class=PlainTextResponse)
-    async def modify_pool(user_id: AuthorizedUser, pool_id: str, is_visible: bool | None) -> Ok:
-        pool = await storage.load_pool(user_id=user_id, pool_id=pool_id)
-        if pool is None:
+    async def modify_pool(
+        user_id: AuthorizedUser, pool_id: str, update: MoneyPoolAttributesUpdate
+    ) -> Ok:
+        if await storage.set_pool_attributes(user_id, pool_id=pool_id, update=update):
+            return "OK"
+        else:
             raise HTTPException(status_code=404, detail="Pool not found")
-        if is_visible is not None:
-            await storage.set_pool_visibility(user_id, pool_id=pool_id, is_visible=is_visible)
-        # nothing more to do
-        return "OK"
 
     @app.post("/transactions", response_class=PlainTextResponse)
     async def add_transaction(user_id: AuthorizedUser, transaction: Transaction) -> Ok:

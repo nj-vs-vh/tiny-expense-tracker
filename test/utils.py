@@ -41,8 +41,9 @@ def mask_recent_timestamps(data: DataT) -> DataT | str:
         if dt is None:
             return False
         else:
-            now = datetime.datetime.now()
-            return dt < now and now - dt < datetime.timedelta(minutes=1)
+            dt_epoch = dt.timestamp()
+            now = datetime.datetime.now().timestamp()
+            return dt_epoch < now and now - dt_epoch < 60
 
     return mask_recursively(
         data, predicate=looks_like_recent_timestamp, mask=lambda _: RECENT_TIMESTAMP

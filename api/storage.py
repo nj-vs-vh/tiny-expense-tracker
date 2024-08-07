@@ -14,8 +14,9 @@ from motor.motor_asyncio import (
     AsyncIOMotorCollection,
 )
 
+from api.types.api import MoneyPoolAttributesUpdate
 from api.types.ids import MoneyPoolId, TransactionId, UserId
-from api.types.money_pool import MoneyPool
+from api.types.money_pool import MoneyPool, StoredMoneyPool
 from api.types.money_sum import MoneySum
 from api.types.transaction import StoredTransaction, Transaction, TransactionFilter
 
@@ -25,7 +26,7 @@ class Storage(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def add_pool(self, user_id: UserId, new_pool: MoneyPool) -> MoneyPoolId: ...
+    async def add_pool(self, user_id: UserId, new_pool: MoneyPool) -> StoredMoneyPool: ...
 
     @abc.abstractmethod
     async def add_balance_to_pool(
@@ -33,15 +34,15 @@ class Storage(abc.ABC):
     ) -> bool: ...
 
     @abc.abstractmethod
-    async def set_pool_visibility(
-        self, user_id: UserId, pool_id: MoneyPoolId, is_visible: bool
+    async def set_pool_attributes(
+        self, user_id: UserId, pool_id: MoneyPoolId, update: MoneyPoolAttributesUpdate
     ) -> bool: ...
 
     @abc.abstractmethod
-    async def load_pools(self, user_id: UserId) -> dict[MoneyPoolId, MoneyPool]: ...
+    async def load_pools(self, user_id: UserId) -> list[StoredMoneyPool]: ...
 
     @abc.abstractmethod
-    async def load_pool(self, user_id: UserId, pool_id: MoneyPoolId) -> MoneyPool | None: ...
+    async def load_pool(self, user_id: UserId, pool_id: MoneyPoolId) -> StoredMoneyPool | None: ...
 
     @abc.abstractmethod
     async def add_transaction(
@@ -62,12 +63,12 @@ class InmemoryStorage(Storage):
 
     def __init__(self) -> None:
         self._user_transactions: dict[UserId, list[StoredTransaction]] = {}
-        self._user_pools: dict[UserId, dict[MoneyPoolId, MoneyPool]] = {}
+        self._user_pools: dict[UserId, list[StoredMoneyPool]] = {}
 
-    async def add_pool(self, user_id: UserId, new_pool: MoneyPool) -> MoneyPoolId:
-        pool_id = str(uuid.uuid4())
-        self._user_pools.setdefault(user_id, {})[pool_id] = new_pool
-        return pool_id
+    async def add_pool(self, user_id: UserId, new_pool: MoneyPool) -> StoredMoneyPool:
+        sp = StoredMoneyPool.from_money_pool(new_pool, id=str(uuid.uuid4()))
+        self._user_pools.setdefault(user_id, []).append(sp)
+        return sp
 
     async def add_balance_to_pool(
         self, user_id: UserId, pool_id: UserId, new_balance: MoneySum
@@ -81,20 +82,22 @@ class InmemoryStorage(Storage):
         else:
             raise ValueError(f"Balance already has currency {new_balance.currency.code}")
 
-    async def set_pool_visibility(
-        self, user_id: UserId, pool_id: MoneyPoolId, is_visible: bool
+    async def set_pool_attributes(
+        self, user_id: UserId, pool_id: MoneyPoolId, update: MoneyPoolAttributesUpdate
     ) -> bool:
         p = await self.load_pool(user_id, pool_id)
         if p is None:
             return False
-        p.is_visible = is_visible
+        p.is_visible = update.is_visible or p.is_visible
+        p.display_name = update.display_name or p.display_name
+        p.display_color = update.display_color or p.display_color
         return True
 
-    async def load_pools(self, user_id: UserId) -> dict[MoneyPoolId, MoneyPool]:
-        return self._user_pools.get(user_id, {})
+    async def load_pools(self, user_id: UserId) -> list[StoredMoneyPool]:
+        return self._user_pools.get(user_id, [])
 
-    async def load_pool(self, user_id: UserId, pool_id: MoneyPoolId) -> MoneyPool | None:
-        user_pools = await self.load_pools(user_id)
+    async def load_pool(self, user_id: UserId, pool_id: MoneyPoolId) -> StoredMoneyPool | None:
+        user_pools = {p.id: p for p in await self.load_pools(user_id)}
         return user_pools.get(pool_id)
 
     async def add_transaction(self, user_id: str, transaction: Transaction) -> StoredTransaction:
@@ -154,12 +157,19 @@ class OwnedPool(MongoStoredModel):
     pool: MoneyPool
     owner: UserId
 
+    def to_stored(self) -> StoredMoneyPool:
+        if self.id is None:
+            raise ValueError(
+                "Attempt to convert non-stored OwnedTransaction (no id attr) to StoredTransaction"
+            )
+        return StoredMoneyPool.from_money_pool(self.pool, id=self.id)
+
 
 class OwnedTransaction(MongoStoredModel):
     transaction: Transaction
     owner: UserId
 
-    def to_stored_transaction(self) -> StoredTransaction:
+    def to_stored(self) -> StoredTransaction:
         if self.id is None:
             raise ValueError(
                 "Attempt to convert non-stored OwnedTransaction (no id attr) to StoredTransaction"
@@ -182,11 +192,11 @@ class MongoDbStorage(Storage):
         # self.logger.info(f"transactions: {await self.transactions_coll.count_documents({})}")
         # self.logger.info(f"pools: {await self.pools_coll.count_documents({})}")
 
-    async def add_pool(self, user_id: UserId, new_pool: MoneyPool) -> UserId:
+    async def add_pool(self, user_id: UserId, new_pool: MoneyPool) -> StoredMoneyPool:
         result = await self.pools_coll.insert_one(
             OwnedPool(pool=new_pool, owner=user_id).model_dump(mode="json")
         )
-        return str(result.inserted_id)
+        return StoredMoneyPool.from_money_pool(new_pool, id=str(result.inserted_id))
 
     def _pool_filter(self, user_id: UserId, pool_id: MoneyPoolId) -> dict[str, Any]:
         if not ObjectId.is_valid(pool_id):
@@ -196,19 +206,19 @@ class MongoDbStorage(Storage):
 
     async def _load_pool_internal(
         self, user_id: UserId, pool_id: MoneyPoolId, session: AsyncIOMotorClientSession | None
-    ) -> MoneyPool | None:
+    ) -> StoredMoneyPool | None:
         doc = await self.pools_coll.find_one(self._pool_filter(user_id, pool_id), session=session)
         if doc is None:
             return None
-        return OwnedPool.model_validate(doc).pool
+        return OwnedPool.model_validate(doc).to_stored()
 
-    async def load_pool(self, user_id: UserId, pool_id: UserId) -> MoneyPool | None:
+    async def load_pool(self, user_id: UserId, pool_id: UserId) -> StoredMoneyPool | None:
         return await self._load_pool_internal(user_id, pool_id, session=None)
 
-    async def load_pools(self, user_id: UserId) -> dict[str, MoneyPool]:
+    async def load_pools(self, user_id: UserId) -> list[StoredMoneyPool]:
         cursor = self.pools_coll.find({"owner": user_id})
         docs = await cursor.to_list(length=1000)
-        return {str(d["_id"]): OwnedPool.model_validate(d).pool for d in docs}
+        return [OwnedPool.model_validate(d).to_stored() for d in docs]
 
     async def add_balance_to_pool(
         self, user_id: UserId, pool_id: UserId, new_balance: MoneySum
@@ -219,12 +229,22 @@ class MongoDbStorage(Storage):
         )
         return result.modified_count == 1
 
-    async def set_pool_visibility(
-        self, user_id: UserId, pool_id: MoneyPoolId, is_visible: bool
+    async def set_pool_attributes(
+        self, user_id: UserId, pool_id: MoneyPoolId, update: MoneyPoolAttributesUpdate
     ) -> bool:
         result = await self.pools_coll.update_one(
             self._pool_filter(user_id, pool_id),
-            {"$set": {"pool.is_visible": is_visible}},
+            {
+                "$set": {
+                    path: new_value
+                    for path, new_value in (
+                        ("pool.is_visible", update.is_visible),
+                        ("pool.display_name", update.display_name),
+                        ("pool.display_color", update.display_color),
+                    )
+                    if new_value is not None
+                }
+            },
         )
         return result.modified_count == 1
 
@@ -236,10 +256,13 @@ class MongoDbStorage(Storage):
         session: AsyncIOMotorClientSession | None,
     ):
         new_sum_idx_in_balance, new_sum = pool.update_with_transaction(transaction)
+        update: dict[str, Any] = {
+            f"pool.balance.{new_sum_idx_in_balance}": new_sum.model_dump(mode="json"),
+        }
+        if pool.last_updated is not None:
+            update["pool.last_updated"] = pool.last_updated.isoformat()
         await self.pools_coll.update_one(
-            self._pool_filter(user_id, transaction.pool_id),
-            {"$set": {f"pool.balance.{new_sum_idx_in_balance}": new_sum.model_dump(mode="json")}},
-            session=session,
+            self._pool_filter(user_id, transaction.pool_id), {"$set": {update}}, session=session
         )
 
     async def add_transaction(
@@ -262,17 +285,19 @@ class MongoDbStorage(Storage):
     async def load_transactions(
         self, user_id: UserId, filter: TransactionFilter | None, offset: int, count: int
     ) -> list[StoredTransaction]:
+        if filter is not None:
+            # TODO
+            raise NotImplementedError()
         docs = (
             await self.transactions_coll.find(
                 {"owner": user_id},
-                # TODO support filtering
             )
             .sort("transaction.timestamp", -1)
             .skip(offset)
             .to_list(length=count)
         )
 
-        return [OwnedTransaction.model_validate(d).to_stored_transaction() for d in docs]
+        return [OwnedTransaction.model_validate(d).to_stored() for d in docs]
 
     def _transaction_filter(
         self, user_id: UserId, transaction_id: TransactionId
