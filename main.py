@@ -16,8 +16,11 @@ logging.basicConfig(
 )
 
 app = create_app(
-    storage=MongoDbStorage(url=os.environ["MONGODB_URL"]),  # type: ignore
-    auth=TokenAuth(server_tokens=os.environ["STATIC_TOKENS"].split(",")),
+    storage=MongoDbStorage(url=os.environ["MONGODB_URL"]),
+    auth=TokenAuth(
+        server_tokens=os.environ["STATIC_TOKENS"].split(","),
+        auth_telegram_bot_token=os.environ["AUTH_TGBOT_TOKEN"],
+    ),
     exchange_rates=RemoteExchangeRates(
         api_url=os.environ["EXCHANGE_RATES_API_URL"],
         cache_file_path=Path(__file__).parent / ".exchange-rates.json",

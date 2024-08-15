@@ -6,12 +6,14 @@ from typing import Annotated, Literal
 
 import pydantic
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 
 from api.auth import Auth
 from api.exchange_rates import ExchangeRates
 from api.storage import Storage
 from api.types.api import (
+    MainApiRouteResponse,
     MoneyPoolAttributesUpdate,
     SyncBalanceRequestBody,
     TransferMoneyRequestBody,
@@ -45,25 +47,53 @@ async def coerce_to_pool(
     )
 
 
-def create_app(storage: Storage, auth: Auth, exchange_rates: ExchangeRates) -> FastAPI:
+def create_app(
+    storage: Storage,
+    auth: Auth,
+    exchange_rates: ExchangeRates,
+    frontend_origins: list[str] | None = None,
+) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         logger.info("Running lifespan methods")
         await storage.initialize()
         logger.info("Storage initialized")
+        await auth.initialize()
+        logger.info("Auth initialized")
         await exchange_rates.initialize()
         logger.info("Exchange rates initialized")
         yield
-        logger.info("Nothing to cleanup, bye")
+        # logger.info("Nothing to cleanup, bye")
 
     app = FastAPI(title="tiny-expense-tracker-api", lifespan=lifespan)
 
+    if frontend_origins is not None:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=frontend_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
     AuthorizedUser = Annotated[UserId, Depends(auth.authorize_request)]
+    auth.setup_login_routes(app)
 
     @app.get("/")
     async def ping() -> dict[str, str]:
         return {"message": "Hi"}
+
+    @app.get("/main")
+    async def main_api_route(user_id: AuthorizedUser) -> MainApiRouteResponse:
+        pools = await storage.load_pools(user_id)
+        last_transactions = await storage.load_transactions(
+            user_id, filter=None, offset=0, count=30
+        )
+        return MainApiRouteResponse(
+            pools=pools,
+            last_transactions=last_transactions,
+        )
 
     @app.post("/pools")
     async def create_pool(user_id: AuthorizedUser, new_pool: MoneyPool) -> StoredMoneyPool:

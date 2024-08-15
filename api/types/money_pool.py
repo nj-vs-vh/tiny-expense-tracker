@@ -2,10 +2,10 @@ import datetime
 
 import pydantic
 
+from api.types.datetime import Datetime
 from api.types.ids import MoneyPoolId
 from api.types.money_sum import MoneySum
 from api.types.transaction import Transaction
-from api.types.datetime import Datetime
 
 
 class MoneyPool(pydantic.BaseModel):
