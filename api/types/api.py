@@ -26,3 +26,8 @@ class TransferMoneyRequestBody(pydantic.BaseModel):
 class MainApiRouteResponse(pydantic.BaseModel):
     pools: list[StoredMoneyPool]
     last_transactions: list[StoredTransaction]
+
+
+class LoginLinkResponse(pydantic.BaseModel):
+    url: str
+    start_param: str

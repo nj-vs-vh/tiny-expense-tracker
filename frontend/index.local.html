@@ -1,21 +1,195 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.js"
+    ></script>
     <title>Tiny expense tracker</title>
-</head>
-<script>
+  </head>
+  <script>
     const API_URL = "http://localhost:8000";
+    const ACCESS_TOKEN_ITEM = "accessToken";
+    let accessToken = null;
+    let authHeaders = null;
 
-    // TODO: auth
-
-    async function loadMainPage() {
-        await fetch(`${API_URL}/main`)
+    function setAccessToken(token) {
+      accessToken = token;
+      authHeaders = { Token: token };
     }
-</script>
-<body>
-    Hello world
-</body>
+    setAccessToken(localStorage.getItem(ACCESS_TOKEN_ITEM));
+
+    document.addEventListener("alpine:init", () => {
+      Alpine.store("isLoggedIn", accessToken !== null);
+    });
+
+    function loginPageData() {
+      return {
+        link: null,
+        loadAuthLink() {
+          fetch(`${API_URL}/auth/login-link`)
+            .then((res) => res.json())
+            .then((link) => {
+              this.link = link;
+              this.isLoading = false;
+              fetch(
+                `${API_URL}/auth/access-token?start_param=${link.start_param}`,
+                {
+                  signal: AbortSignal.timeout(5 * 60 * 1000), // this is a long polling request!
+                }
+              )
+                .then((resp) => resp.text())
+                .then((newAccessToken) => {
+                  localStorage.setItem(ACCESS_TOKEN_ITEM, newAccessToken);
+                  setAccessToken(accessToken);
+                  this.$store.isLoggedIn = true;
+                });
+            });
+        },
+      };
+    }
+
+    function appData() {
+      return {
+        data: null,
+        loadAppData() {
+          fetch(`${API_URL}/main`, { headers: authHeaders })
+            .then((resp) => resp.json())
+            .then((data) => {
+              this.data = data;
+              data.last_transactions.reverse();
+            })
+            .catch((reason) => {
+              // TODO
+            });
+        },
+      };
+    }
+
+    function lookupPool(pools, poolId) {
+      return pools.filter((p) => p.id == poolId)[0];
+    }
+  </script>
+  <body x-data>
+    <!-- Login page -->
+    <template x-if="!$store.isLoggedIn">
+      <div x-data="loginPageData()" x-init="loadAuthLink()">
+        <template x-if="link === null"><span>Loading...</span></template>
+        <template x-if="link !== null">
+          <div class="page-center">
+            <h2>
+              Visit <a x-bind:href="link.url" target="_blank">link</a> to login
+              via Telegram
+            </h2>
+          </div>
+        </template>
+      </div>
+    </template>
+
+    <!-- Actual app -->
+    <template x-if="$store.isLoggedIn">
+      <div x-data="appData()" x-init="loadAppData()">
+        <template x-if="data === null"><span>Loading...</span></template>
+        <template x-if="data !== null">
+          <div id="app-container">
+            <div
+              style="
+                display: flex;
+                flex-direction: row;
+                gap: 1rem;
+                border-bottom: 1px solid grey;
+                padding-bottom: 1rem;
+                margin-bottom: 1rem;
+              "
+            >
+              <template x-for="pool in data.pools">
+                <div
+                  style="
+                    border: 1px solid black;
+                    padding: 0.5rem 1rem;
+                    border-radius: 1rem;
+                    display: flex;
+                    flex-direction: row;
+                    align-items: center;
+                    gap: 1rem;
+                  "
+                >
+                  <span
+                    x-text="pool.display_name"
+                    style="font-size: x-large; font-weight: 600"
+                  ></span>
+                  <div style="display: flex; flex-direction: column">
+                    <template x-for="sum in pool.balance">
+                      <div>
+                        <strong x-text="sum.amount"></strong>
+                        <span x-text="sum.currency"></span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            <div>
+              <template x-for="t in data.last_transactions">
+                <div>
+                  <div>
+                    <span x-text="t.sum.amount"></span>
+                    <span x-text="t.sum.currency"></span>
+                  </div>
+                  <div x-text="lookupPool(data.pools, t.pool_id).display_name"></div>
+                  <div x-text="t.description"></div>
+                </div>
+                <!-- <div
+                  style="
+                    border: 1px solid black;
+                    padding: 0.5rem 1rem;
+                    border-radius: 1rem;
+                    display: flex;
+                    flex-direction: row;
+                    align-items: center;
+                    gap: 1rem;
+                  "
+                >
+                  <span
+                    x-text="pool.display_name"
+                    style="font-size: x-large; font-weight: 600"
+                  ></span>
+                  <div style="display: flex; flex-direction: column">
+                    <template x-for="sum in pool.balance">
+                      <div>
+                        <strong x-text="sum.amount"></strong>
+                        <span x-text="sum.currency"></span>
+                      </div>
+                    </template>
+                  </div>
+                </div> -->
+              </template>
+            </div>
+
+            <span x-text="JSON.stringify(data)"></span>
+          </div>
+        </template>
+      </div>
+    </template>
+  </body>
 </html>
+
+<style>
+  .page-center {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  #app-container {
+    max-width: min(100vh, 700px);
+    margin: auto;
+    margin-top: 2rem;
+  }
+</style>

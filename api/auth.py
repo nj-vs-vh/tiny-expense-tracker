@@ -18,6 +18,7 @@ from fastapi.responses import PlainTextResponse
 from telebot import AsyncTeleBot
 from telebot import types as tg
 
+from api.types.api import LoginLinkResponse
 from api.types.ids import UserId
 
 logger = logging.getLogger(__name__)
@@ -128,20 +129,23 @@ class TokenAuth(Auth):
             user_id_fut.set_result(md5(str(message.from_user.id).encode("utf-8")).hexdigest())
             await self.bot.reply_to(message, text="OK")
 
-        asyncio.create_task(self.bot.infinity_polling(timeout=180))
+        asyncio.create_task(self.bot.infinity_polling())
 
     def setup_login_routes(self, app: fastapi.FastAPI) -> None:
-        @app.get("/auth/login-url", response_class=PlainTextResponse)
-        async def request_login_url() -> str:
+        @app.get("/auth/login-link")
+        async def request_login_link() -> LoginLinkResponse:
             start_param = secrets.token_urlsafe(nbytes=16)
             access_token = secrets.token_urlsafe(nbytes=64)
             self._access_token_by_bot_start_param[start_param] = access_token
             self._user_id_future_by_access_token[access_token] = asyncio.Future()
-            return f"https://t.me/{self.bot_user.username}?start={start_param}"
+            return LoginLinkResponse(
+                url=f"https://t.me/{self.bot_user.username}?start={start_param}",
+                start_param=start_param,
+            )
 
-        @app.post("/auth/login", response_class=PlainTextResponse)
-        async def get_access_token_after_login_to_bot(bot_start_param: str) -> str:
-            access_token = self._access_token_by_bot_start_param.get(bot_start_param)
+        @app.get("/auth/access-token", response_class=PlainTextResponse)
+        async def get_access_token_after_login_to_bot(start_param: str) -> str:
+            access_token = self._access_token_by_bot_start_param.get(start_param)
             if access_token is None:
                 raise HTTPException(404, "Expired or non-existent bot start param")
             timeout = 5 * 60
