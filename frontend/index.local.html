@@ -10,7 +10,13 @@
     <title>Tiny expense tracker</title>
   </head>
   <script>
-    const API_URL = "http://localhost:8000";
+    let API_URL;
+    try {
+      API_URL = __replacedOnRender__;
+    } catch {
+      API_URL = "http://localhost:8000";
+    }
+
     const ACCESS_TOKEN_ITEM = "accessToken";
     let accessToken = null;
     let authHeaders = null;
@@ -68,6 +74,7 @@
       };
     }
 
+    // rendering helpers
     function lookupPool(pools, poolId) {
       return pools.filter((p) => p.id == poolId)[0];
     }
@@ -101,7 +108,6 @@
                 gap: 1rem;
                 border-bottom: 1px solid grey;
                 padding-bottom: 1rem;
-                margin-bottom: 1rem;
               "
             >
               <template x-for="pool in data.pools">
@@ -132,44 +138,27 @@
               </template>
             </div>
 
-            <div>
+            <div style="margin-top: 0.5rem">
               <template x-for="t in data.last_transactions">
-                <div>
+                <div
+                  id="transaction"
+                  style="padding: 0.3rem 0; border-bottom: lightgray 1px solid"
+                >
                   <div>
-                    <span x-text="t.sum.amount"></span>
+                    <strong
+                      x-text="t.sum.amount"
+                      style="font-size: larger"
+                    ></strong>
                     <span x-text="t.sum.currency"></span>
+                    <span style="color: rgb(75, 75, 75)">from</span>
+                    <span
+                      x-text="lookupPool(data.pools, t.pool_id).display_name"
+                    ></span>
                   </div>
-                  <div x-text="lookupPool(data.pools, t.pool_id).display_name"></div>
                   <div x-text="t.description"></div>
                 </div>
-                <!-- <div
-                  style="
-                    border: 1px solid black;
-                    padding: 0.5rem 1rem;
-                    border-radius: 1rem;
-                    display: flex;
-                    flex-direction: row;
-                    align-items: center;
-                    gap: 1rem;
-                  "
-                >
-                  <span
-                    x-text="pool.display_name"
-                    style="font-size: x-large; font-weight: 600"
-                  ></span>
-                  <div style="display: flex; flex-direction: column">
-                    <template x-for="sum in pool.balance">
-                      <div>
-                        <strong x-text="sum.amount"></strong>
-                        <span x-text="sum.currency"></span>
-                      </div>
-                    </template>
-                  </div>
-                </div> -->
               </template>
             </div>
-
-            <span x-text="JSON.stringify(data)"></span>
           </div>
         </template>
       </div>

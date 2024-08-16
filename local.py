@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 
 from api.app import create_app
-from api.auth import TokenAuth
+from api.auth import NoAuth, TokenAuth
 from api.exchange_rates import DumbExchangeRates
 from api.storage import InmemoryStorage
 
@@ -16,10 +16,11 @@ logging.basicConfig(
 
 app = create_app(
     storage=InmemoryStorage(),
-    auth=TokenAuth(
-        server_tokens=["example-token"],
-        auth_telegram_bot_token=os.environ["AUTH_TGBOT_TOKEN"],
-    ),
+    # auth=TokenAuth(
+    #     server_tokens=["example-token"],
+    #     auth_telegram_bot_token=os.environ["AUTH_TGBOT_TOKEN"],
+    # ),
+    auth=NoAuth(),
     exchange_rates=DumbExchangeRates(),
     frontend_origins=["http://127.0.0.1:5500"],
 )

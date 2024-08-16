@@ -120,8 +120,8 @@ def create_app(
         else:
             raise HTTPException(status_code=404, detail="Pool not found")
 
-    @app.post("/transactions", response_class=PlainTextResponse)
-    async def add_transaction(user_id: AuthorizedUser, transaction: Transaction) -> Ok:
+    @app.post("/transactions")
+    async def add_transaction(user_id: AuthorizedUser, transaction: Transaction) -> StoredTransaction:
         money_pool = await storage.load_pool(user_id=user_id, pool_id=transaction.pool_id)
         if money_pool is None:
             raise HTTPException(
@@ -129,8 +129,7 @@ def create_app(
                 detail="Transaction is attributed to non-existent money pool",
             )
         await coerce_to_pool(transaction, money_pool, exchange_rates)
-        await storage.add_transaction(user_id=user_id, transaction=transaction)
-        return "OK"
+        return await storage.add_transaction(user_id=user_id, transaction=transaction)
 
     @app.get("/transactions")
     async def get_transactions(

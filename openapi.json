@@ -1,10 +1,50 @@
 {
     "openapi": "3.1.0",
     "info": {
-        "title": "FastAPI",
+        "title": "tiny-expense-tracker-api",
         "version": "0.1.0"
     },
     "paths": {
+        "/": {
+            "get": {
+                "summary": "Ping",
+                "operationId": "ping__get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "type": "object",
+                                    "title": "Response Ping  Get"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/main": {
+            "get": {
+                "summary": "Main Api Route",
+                "operationId": "main_api_route_main_get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MainApiRouteResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/pools": {
             "get": {
                 "summary": "Get Pools",
@@ -15,10 +55,10 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "additionalProperties": {
-                                        "$ref": "#/components/schemas/MoneyPool-Output"
+                                    "items": {
+                                        "$ref": "#/components/schemas/StoredMoneyPool"
                                     },
-                                    "type": "object",
+                                    "type": "array",
                                     "title": "Response Get Pools Pools Get"
                                 }
                             }
@@ -33,7 +73,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/MoneyPool-Input"
+                                "$ref": "#/components/schemas/MoneyPool"
                             }
                         }
                     },
@@ -45,7 +85,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/MoneyPoolIdResponse"
+                                    "$ref": "#/components/schemas/StoredMoneyPool"
                                 }
                             }
                         }
@@ -65,8 +105,8 @@
         },
         "/pools/{pool_id}": {
             "get": {
-                "summary": "Get Specific Pool",
-                "operationId": "get_specific_pool_pools__pool_id__get",
+                "summary": "Get Pool",
+                "operationId": "get_pool_pools__pool_id__get",
                 "parameters": [
                     {
                         "name": "pool_id",
@@ -84,7 +124,54 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/MoneyPool-Output"
+                                    "$ref": "#/components/schemas/StoredMoneyPool"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "summary": "Modify Pool",
+                "operationId": "modify_pool_pools__pool_id__put",
+                "parameters": [
+                    {
+                        "name": "pool_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Pool Id"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MoneyPoolAttributesUpdate"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
                                 }
                             }
                         }
@@ -111,7 +198,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/Transaction-Input"
+                                "$ref": "#/components/schemas/Transaction"
                             }
                         }
                     }
@@ -121,7 +208,9 @@
                         "description": "Successful Response",
                         "content": {
                             "application/json": {
-                                "schema": {}
+                                "schema": {
+                                    "$ref": "#/components/schemas/StoredTransaction"
+                                }
                             }
                         }
                     },
@@ -173,9 +262,86 @@
                                 "schema": {
                                     "type": "array",
                                     "items": {
-                                        "$ref": "#/components/schemas/Transaction-Output"
+                                        "$ref": "#/components/schemas/StoredTransaction"
                                     },
                                     "title": "Response Get Transactions Transactions Get"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/transactions/{transaction_id}": {
+            "delete": {
+                "summary": "Delete Transaction",
+                "operationId": "delete_transaction_transactions__transaction_id__delete",
+                "parameters": [
+                    {
+                        "name": "transaction_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Transaction Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/transfer": {
+            "post": {
+                "summary": "Make Transfer",
+                "operationId": "make_transfer_transfer_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TransferMoneyRequestBody"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
                                 }
                             }
                         }
@@ -222,10 +388,9 @@
                     "200": {
                         "description": "Successful Response",
                         "content": {
-                            "application/json": {
+                            "text/plain": {
                                 "schema": {
-                                    "type": "string",
-                                    "title": "Response Sync Pool Balance Sync Balance  Pool Id  Post"
+                                    "type": "string"
                                 }
                             }
                         }
@@ -295,7 +460,31 @@
                 "type": "object",
                 "title": "HTTPValidationError"
             },
-            "MoneyPool-Input": {
+            "MainApiRouteResponse": {
+                "properties": {
+                    "pools": {
+                        "items": {
+                            "$ref": "#/components/schemas/StoredMoneyPool"
+                        },
+                        "type": "array",
+                        "title": "Pools"
+                    },
+                    "last_transactions": {
+                        "items": {
+                            "$ref": "#/components/schemas/StoredTransaction"
+                        },
+                        "type": "array",
+                        "title": "Last Transactions"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "pools",
+                    "last_transactions"
+                ],
+                "title": "MainApiRouteResponse"
+            },
+            "MoneyPool": {
                 "properties": {
                     "display_name": {
                         "type": "string",
@@ -307,6 +496,33 @@
                         },
                         "type": "array",
                         "title": "Balance"
+                    },
+                    "is_visible": {
+                        "type": "boolean",
+                        "title": "Is Visible",
+                        "default": true
+                    },
+                    "last_updated": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Last Updated"
+                    },
+                    "display_color": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Display Color"
                     }
                 },
                 "type": "object",
@@ -316,39 +532,44 @@
                 ],
                 "title": "MoneyPool"
             },
-            "MoneyPool-Output": {
+            "MoneyPoolAttributesUpdate": {
                 "properties": {
+                    "is_visible": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Is Visible"
+                    },
                     "display_name": {
-                        "type": "string",
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
                         "title": "Display Name"
                     },
-                    "balance": {
-                        "items": {
-                            "$ref": "#/components/schemas/MoneySum-Output"
-                        },
-                        "type": "array",
-                        "title": "Balance"
+                    "display_color": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Display Color"
                     }
                 },
                 "type": "object",
-                "required": [
-                    "display_name",
-                    "balance"
-                ],
-                "title": "MoneyPool"
-            },
-            "MoneyPoolIdResponse": {
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "title": "Id"
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "id"
-                ],
-                "title": "MoneyPoolIdResponse"
+                "title": "MoneyPoolAttributesUpdate"
             },
             "MoneySum-Input": {
                 "properties": {
@@ -391,6 +612,105 @@
                 ],
                 "title": "MoneySum"
             },
+            "StoredMoneyPool": {
+                "properties": {
+                    "display_name": {
+                        "type": "string",
+                        "title": "Display Name"
+                    },
+                    "balance": {
+                        "items": {
+                            "$ref": "#/components/schemas/MoneySum-Output"
+                        },
+                        "type": "array",
+                        "title": "Balance"
+                    },
+                    "is_visible": {
+                        "type": "boolean",
+                        "title": "Is Visible",
+                        "default": true
+                    },
+                    "last_updated": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Last Updated"
+                    },
+                    "display_color": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Display Color"
+                    },
+                    "id": {
+                        "type": "string",
+                        "title": "Id"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "display_name",
+                    "balance",
+                    "id"
+                ],
+                "title": "StoredMoneyPool"
+            },
+            "StoredTransaction": {
+                "properties": {
+                    "sum": {
+                        "$ref": "#/components/schemas/MoneySum-Output"
+                    },
+                    "pool_id": {
+                        "type": "string",
+                        "title": "Pool Id"
+                    },
+                    "description": {
+                        "type": "string",
+                        "title": "Description"
+                    },
+                    "timestamp": {
+                        "type": "number",
+                        "title": "Timestamp"
+                    },
+                    "is_diffuse": {
+                        "type": "boolean",
+                        "title": "Is Diffuse",
+                        "default": false
+                    },
+                    "original_currency": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "id": {
+                        "type": "string",
+                        "title": "Id"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "sum",
+                    "pool_id",
+                    "description",
+                    "id"
+                ],
+                "title": "StoredTransaction"
+            },
             "SyncBalanceRequestBody": {
                 "properties": {
                     "amounts": {
@@ -407,7 +727,7 @@
                 ],
                 "title": "SyncBalanceRequestBody"
             },
-            "Transaction-Input": {
+            "Transaction": {
                 "properties": {
                     "sum": {
                         "$ref": "#/components/schemas/MoneySum-Input"
@@ -448,46 +768,32 @@
                 ],
                 "title": "Transaction"
             },
-            "Transaction-Output": {
+            "TransferMoneyRequestBody": {
                 "properties": {
-                    "sum": {
-                        "$ref": "#/components/schemas/MoneySum-Output"
-                    },
-                    "pool_id": {
+                    "from_pool": {
                         "type": "string",
-                        "title": "Pool Id"
+                        "title": "From Pool"
+                    },
+                    "to_pool": {
+                        "type": "string",
+                        "title": "To Pool"
+                    },
+                    "sum": {
+                        "$ref": "#/components/schemas/MoneySum-Input"
                     },
                     "description": {
                         "type": "string",
                         "title": "Description"
-                    },
-                    "timestamp": {
-                        "type": "number",
-                        "title": "Timestamp"
-                    },
-                    "is_diffuse": {
-                        "type": "boolean",
-                        "title": "Is Diffuse",
-                        "default": false
-                    },
-                    "original_currency": {
-                        "anyOf": [
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ]
                     }
                 },
                 "type": "object",
                 "required": [
+                    "from_pool",
+                    "to_pool",
                     "sum",
-                    "pool_id",
                     "description"
                 ],
-                "title": "Transaction"
+                "title": "TransferMoneyRequestBody"
             },
             "ValidationError": {
                 "properties": {
