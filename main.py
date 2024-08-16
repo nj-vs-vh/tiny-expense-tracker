@@ -25,4 +25,5 @@ app = create_app(
         api_url=os.environ["EXCHANGE_RATES_API_URL"],
         cache_file_path=Path(__file__).parent / ".exchange-rates.json",
     ),
+    frontend_origins=os.environ["FRONTEND_ORIGINS"].split(","),
 )
