@@ -81,7 +81,6 @@
             })
             .then((data) => {
               this.data = data;
-              data.last_transactions.reverse();
             })
             .catch((reason) => {
               localStorage.clear(); // to prevent using stale access token
