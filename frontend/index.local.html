@@ -62,7 +62,13 @@
         data: null,
         loadAppData() {
           fetch(`${API_URL}/main`, { headers: authHeaders })
-            .then((resp) => resp.json())
+            .then((resp) => {
+              if (resp.ok) {
+                return resp.json();
+              } else {
+                throw resp;
+              }
+            })
             .then((data) => {
               this.data = data;
               data.last_transactions.reverse();
