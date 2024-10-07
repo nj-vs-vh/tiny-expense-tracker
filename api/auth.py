@@ -105,7 +105,7 @@ class TokenAuth(Auth):
     async def _get_user_id(self, token: str, timeout_sec: float | None) -> str | None:
         f = self._user_id_future_by_access_token.get(token)
         if f is None:
-            raise RuntimeError("Invalid state: no user id future for an access token")
+            return None
         try:
             return await asyncio.wait_for(f, timeout=timeout_sec or 0.0)
         except asyncio.TimeoutError:
@@ -115,7 +115,7 @@ class TokenAuth(Auth):
         self._bot_user = await self.bot.get_me()
         logger.info(f"Initialized bot user: {self.bot_user}")
 
-        @self.bot.message_handler(commands=["start"])
+        @self.bot.message_handler(commands=["start"])  # type: ignore
         async def login(message: tg.Message):
             message_text_parts = message.text_content.split()
             if len(message_text_parts) <= 1:

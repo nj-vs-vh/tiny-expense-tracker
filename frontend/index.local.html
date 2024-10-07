@@ -39,7 +39,6 @@
             .then((res) => res.json())
             .then((link) => {
               this.link = link;
-              this.isLoading = false;
               fetch(
                 `${API_URL}/auth/access-token?start_param=${link.start_param}`,
                 {
@@ -50,6 +49,7 @@
                 .then((newAccessToken) => {
                   localStorage.setItem(ACCESS_TOKEN_ITEM, newAccessToken);
                   setAccessToken(accessToken);
+                  console.info("Got access token, triggering alpine reload")
                   this.$store.isLoggedIn = true;
                 });
             });
