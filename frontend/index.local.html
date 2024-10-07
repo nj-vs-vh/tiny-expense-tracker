@@ -45,12 +45,22 @@
                   signal: AbortSignal.timeout(5 * 60 * 1000), // this is a long polling request!
                 }
               )
-                .then((resp) => resp.text())
+                .then((resp) => {
+                  if (resp.ok) {
+                    return resp.text();
+                  } else {
+                    throw resp;
+                  }
+                })
                 .then((newAccessToken) => {
                   localStorage.setItem(ACCESS_TOKEN_ITEM, newAccessToken);
-                  setAccessToken(accessToken);
-                  console.info("Got access token, triggering alpine reload");
+                  setAccessToken(newAccessToken);
+                  console.log("Got access token, triggering alpine reload");
                   this.$store.isLoggedIn = true;
+                })
+                .catch((err) => {
+                  console.log(err);
+                  alert("Something went wrong, try reloading page");
                 });
             });
         },

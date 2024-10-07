@@ -103,11 +103,11 @@ class TokenAuth(Auth):
         return self._bot_user
 
     async def _get_user_id(self, token: str, timeout_sec: float | None) -> str | None:
-        f = self._user_id_future_by_access_token.get(token)
-        if f is None:
+        fut = self._user_id_future_by_access_token.get(token)
+        if fut is None:
             return None
         try:
-            return await asyncio.wait_for(f, timeout=timeout_sec or 0.0)
+            return await asyncio.wait_for(fut, timeout=timeout_sec or 0.0)
         except asyncio.TimeoutError:
             return None
 
