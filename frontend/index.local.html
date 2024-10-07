@@ -134,6 +134,7 @@
                     border-radius: 1rem;
                     display: flex;
                     flex-direction: row;
+                    flex-wrap: wrap;
                     align-items: center;
                     gap: 1rem;
                   "
@@ -144,7 +145,7 @@
                   ></span>
                   <div style="display: flex; flex-direction: column">
                     <template x-for="sum in pool.balance">
-                      <div>
+                      <div style="text-wrap: nowrap;">
                         <strong x-text="sum.amount"></strong>
                         <span x-text="sum.currency"></span>
                       </div>
