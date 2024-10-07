@@ -74,7 +74,8 @@
               data.last_transactions.reverse();
             })
             .catch((reason) => {
-              alert(`Unexpected error, try reloading the page: ${reason}`);
+              localStorage.clear(); // to prevent using stale access token
+              window.location.reload();
             });
         },
       };
