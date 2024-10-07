@@ -49,7 +49,7 @@
                 .then((newAccessToken) => {
                   localStorage.setItem(ACCESS_TOKEN_ITEM, newAccessToken);
                   setAccessToken(accessToken);
-                  console.info("Got access token, triggering alpine reload")
+                  console.info("Got access token, triggering alpine reload");
                   this.$store.isLoggedIn = true;
                 });
             });
@@ -68,7 +68,7 @@
               data.last_transactions.reverse();
             })
             .catch((reason) => {
-              // TODO
+              alert(`Unexpected error, try reloading the page: ${reason}`);
             });
         },
       };
