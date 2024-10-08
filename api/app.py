@@ -64,7 +64,10 @@ async def pool_total(
     total_amount = sum(p for p in contributions.values())
     total = MoneySum(amount=Decimal(total_amount), currency=target_currency)
     total.round_for_currency()
-    fractions = {c: p / total_amount for c, p in contributions.items()}
+    if total_amount > 0:
+        fractions = {c: p / total_amount for c, p in contributions.items()}
+    else:
+        fractions = {c: 1 / len(contributions) for c in contributions}
     return total, fractions
 
 
