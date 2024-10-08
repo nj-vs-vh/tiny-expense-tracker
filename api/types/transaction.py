@@ -13,7 +13,9 @@ class Transaction(pydantic.BaseModel):
     sum: MoneySum
     pool_id: MoneyPoolId
     description: str
-    timestamp: Datetime = pydantic.Field(default_factory=datetime.datetime.now)
+    timestamp: Datetime = pydantic.Field(
+        default_factory=lambda: datetime.datetime.now(tz=datetime.UTC)
+    )
 
     # diffuse = a transaction implying any number of actual transactions too small to be tracked
     is_diffuse: bool = False
@@ -23,7 +25,7 @@ class Transaction(pydantic.BaseModel):
 
     def inverted(self) -> "Transaction":
         res = copy.deepcopy(self)
-        res.sum.amount *= -1
+        res.sum.amount = -res.sum.amount
         return res
 
 

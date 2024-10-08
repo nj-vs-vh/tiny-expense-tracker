@@ -279,3 +279,96 @@ def test_transfer_between_pools(client: TestClient) -> None:
             "id": MASKED_ID,
         },
     ]
+
+
+def test_report(client: TestClient) -> None:
+    response = client.post(
+        "/pools",
+        json={"display_name": "debit", "balance": [{"amount": 300, "currency": "USD"}]},
+    )
+    assert response.status_code == 200
+    pool_id = response.json()["id"]
+
+    start = datetime.datetime(year=2024, month=9, day=1, tzinfo=datetime.UTC)
+    for amount, days in ((-100, 1), (-50, 5), (-10, 6), (-50, 12), (150, 8)):
+        response = client.post(
+            "/transactions",
+            json={
+                "timestamp": (start + datetime.timedelta(days=days)).timestamp(),
+                "sum": {"amount": amount, "currency": "USD"},
+                "pool_id": pool_id,
+                "description": "whatever",
+            },
+        )
+        assert response.status_code == 200
+
+    end = start + datetime.timedelta(days=14)
+    response = client.get(
+        f"/report",
+        params={
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "points": 3,
+        },
+    )
+    assert response.status_code == 200
+    assert mask_recent_timestamps(response.json()) == {
+        "snapshots": [
+            {
+                "timestamp": end.timestamp(),
+                "pool_stats": [
+                    {
+                        "pool": {
+                            "display_name": "debit",
+                            "balance": [{"amount": "240.00", "currency": "USD"}],
+                            "is_visible": True,
+                            "last_updated": RECENT_TIMESTAMP,
+                            "display_color": None,
+                            "id": pool_id,
+                        },
+                        "total": {"amount": "240.00", "currency": "EUR"},
+                        "fractions": {"USD": 1.0},
+                    }
+                ],
+                "overall_total": {"amount": "240.00", "currency": "EUR"},
+            },
+            {
+                "timestamp": (start.timestamp() + end.timestamp()) / 2,
+                "pool_stats": [
+                    {
+                        "pool": {
+                            "display_name": "debit",
+                            "balance": [{"amount": "140.00", "currency": "USD"}],
+                            "is_visible": True,
+                            "last_updated": RECENT_TIMESTAMP,
+                            "display_color": None,
+                            "id": pool_id,
+                        },
+                        "total": {"amount": "140.00", "currency": "EUR"},
+                        "fractions": {"USD": 1.0},
+                    }
+                ],
+                "overall_total": {"amount": "140.00", "currency": "EUR"},
+            },
+            {
+                "timestamp": start.timestamp(),
+                "pool_stats": [
+                    {
+                        "pool": {
+                            "display_name": "debit",
+                            "balance": [{"amount": "300.00", "currency": "USD"}],
+                            "is_visible": True,
+                            "last_updated": RECENT_TIMESTAMP,
+                            "display_color": None,
+                            "id": pool_id,
+                        },
+                        "total": {"amount": "300.00", "currency": "EUR"},
+                        "fractions": {"USD": 1.0},
+                    }
+                ],
+                "overall_total": {"amount": "300.00", "currency": "EUR"},
+            },
+        ],
+        "spent": {"amount": "210.00", "currency": "EUR"},
+        "made": {"amount": "150.00", "currency": "EUR"},
+    }

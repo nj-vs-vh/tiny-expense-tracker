@@ -115,6 +115,7 @@ class InmemoryStorage(Storage):
         pool.update_with_transaction(transaction)
         stored = StoredTransaction.from_transaction(transaction, id=str(uuid.uuid4()))
         self._user_transactions.setdefault(user_id, []).append(stored)
+        self._user_transactions[user_id].sort(key=lambda t: t.timestamp)
         return copy.deepcopy(stored)
 
     async def load_transactions(

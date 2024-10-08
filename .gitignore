@@ -224,3 +224,4 @@ pip-selfcheck.json
 .exchange-rates.json
 temp*.py
 frontend/index.html
+.vscode

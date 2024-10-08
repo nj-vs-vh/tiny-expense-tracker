@@ -138,8 +138,25 @@ def create_app(
         points: ReportPoints = 30,
         currency: Currency = CURRENCIES["EUR"],
     ) -> ReportApiRouteResponse:
+        if start.tzinfo is None or (end is not None and end.tzinfo is None):
+            raise HTTPException(
+                status_code=400, detail="All datetimes must have timezone info specified"
+            )
         pools = await storage.load_pools(user_id)
         current_pools_by_id = {p.id: p for p in pools}
+
+        # first, reverting pools to their state at end time
+        if end is not None:
+            transactions_after_end = await storage.load_transactions(
+                user_id,
+                filter=TransactionFilter(min_timestamp=end),
+                offset=0,
+                count=10_000,
+            )
+            for t in transactions_after_end:
+                current_pools_by_id[t.pool_id].update_with_transaction(t.inverted())
+
+        # now, loading transactions in the period of interest
         end_dt = end or datetime.datetime.now(tz=datetime.UTC)
         transactions = await storage.load_transactions(
             user_id,
@@ -152,8 +169,10 @@ def create_app(
             end_dt - datetime.timedelta(seconds=timestep * steps) for steps in range(points)
         ]
         snapshot_pools = [copy.deepcopy(list(current_pools_by_id.values()))]
+        # going over transactions latest to earliest, applying
+        transactions.sort(key=lambda t: t.timestamp, reverse=True)
         for t in transactions:
-            if t.timestamp > snapshot_dts[len(snapshot_pools)]:
+            if t.timestamp < snapshot_dts[len(snapshot_pools)]:
                 snapshot_pools.append(copy.deepcopy(list(current_pools_by_id.values())))
             current_pools_by_id[t.pool_id].update_with_transaction(t.inverted())
         missing_snapshots_count = len(snapshot_dts) - len(snapshot_pools)
@@ -182,7 +201,7 @@ def create_app(
         return ReportApiRouteResponse(
             snapshots=snapshots,
             spent=await sum_transactions(
-                transactions=(t for t in transactions if t.sum.amount < 0),
+                transactions=(t.inverted() for t in transactions if t.sum.amount < 0),
                 exchange_rates=exchange_rates,
                 target_currency=currency,
             ),
