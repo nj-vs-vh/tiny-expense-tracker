@@ -3,7 +3,7 @@ import copy
 import logging
 import time
 import uuid
-from typing import Annotated, Any, Self, Type
+from typing import Annotated, Any
 
 import fastapi
 import pydantic
@@ -73,7 +73,7 @@ class InmemoryStorage(Storage):
     async def add_balance_to_pool(
         self, user_id: UserId, pool_id: UserId, new_balance: MoneySum
     ) -> bool:
-        p = await self.load_pool(user_id, pool_id)
+        p = await self._load_pool_internal(user_id, pool_id)
         if p is None:
             return False
         if new_balance.currency not in [s.currency for s in p.balance]:
@@ -85,7 +85,7 @@ class InmemoryStorage(Storage):
     async def set_pool_attributes(
         self, user_id: UserId, pool_id: MoneyPoolId, update: MoneyPoolAttributesUpdate
     ) -> bool:
-        p = await self.load_pool(user_id, pool_id)
+        p = await self._load_pool_internal(user_id, pool_id)
         if p is None:
             return False
         p.is_visible = update.is_visible or p.is_visible
@@ -93,15 +93,23 @@ class InmemoryStorage(Storage):
         p.display_color = update.display_color or p.display_color
         return True
 
+    async def _load_pools_internal(self, user_id: UserId) -> list[StoredMoneyPool]:
+        return self._user_pools.get(user_id, [])
+
     async def load_pools(self, user_id: UserId) -> list[StoredMoneyPool]:
-        return copy.deepcopy(self._user_pools.get(user_id, []))
+        return copy.deepcopy(await self._load_pools_internal(user_id))
+
+    async def _load_pool_internal(
+        self, user_id: UserId, pool_id: MoneyPoolId
+    ) -> StoredMoneyPool | None:
+        user_pools = {p.id: p for p in await self._load_pools_internal(user_id)}
+        return user_pools.get(pool_id)
 
     async def load_pool(self, user_id: UserId, pool_id: MoneyPoolId) -> StoredMoneyPool | None:
-        user_pools = {p.id: p for p in await self.load_pools(user_id)}
-        return copy.deepcopy(user_pools.get(pool_id))
+        return copy.deepcopy(await self._load_pool_internal(user_id, pool_id))
 
     async def add_transaction(self, user_id: str, transaction: Transaction) -> StoredTransaction:
-        pool = await self.load_pool(user_id, transaction.pool_id)
+        pool = await self._load_pool_internal(user_id, transaction.pool_id)
         if pool is None:
             raise ValueError("Transaction attributed to non-existent pool")
         pool.update_with_transaction(transaction)
@@ -128,7 +136,7 @@ class InmemoryStorage(Storage):
         deleted = matching_transactions[0]
         deleted = copy.deepcopy(deleted)
         deleted.sum.amount = -deleted.sum.amount  # invert for pool updating purpose
-        pool = await self.load_pool(user_id, deleted.pool_id)
+        pool = await self._load_pool_internal(user_id, deleted.pool_id)
         assert pool is not None
         pool.update_with_transaction(deleted)
         self._user_transactions[user_id] = [t for t in user_transactions if t.id != transaction_id]
