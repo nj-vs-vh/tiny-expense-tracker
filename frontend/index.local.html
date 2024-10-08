@@ -90,6 +90,24 @@
       };
     }
 
+    function deleteTransaction(transactionId, data) {
+      const deleted = data.last_transactions.filter(
+        (t) => t.id == transactionId
+      )[0];
+      fetch(`${API_URL}/transactions/${transactionId}`, {
+        method: "DELETE",
+        headers: authHeaders,
+      }).then((resp) => {
+        if (resp.ok) {
+          window.location.reload();
+        } else {
+          console.log(transactionId);
+          console.log(resp);
+          alert("Failed to delete, try to reload the page");
+        }
+      });
+    }
+
     // rendering helpers
     function lookupPool(pools, poolId) {
       return pools.filter((p) => p.id == poolId)[0];
@@ -145,7 +163,7 @@
                   ></span>
                   <div style="display: flex; flex-direction: column">
                     <template x-for="sum in pool.balance">
-                      <div style="text-wrap: nowrap;">
+                      <div style="text-wrap: nowrap">
                         <strong x-text="sum.amount"></strong>
                         <span x-text="sum.currency"></span>
                       </div>
@@ -159,20 +177,36 @@
               <template x-for="t in data.last_transactions">
                 <div
                   id="transaction"
-                  style="padding: 0.3rem 0; border-bottom: lightgray 1px solid"
+                  style="
+                    padding: 0.3rem 0;
+                    border-bottom: lightgray 1px solid;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                  "
                 >
                   <div>
-                    <strong
-                      x-text="t.sum.amount"
-                      style="font-size: larger"
-                    ></strong>
-                    <span x-text="t.sum.currency"></span>
-                    <span style="color: rgb(75, 75, 75)">from</span>
-                    <span
-                      x-text="lookupPool(data.pools, t.pool_id).display_name"
-                    ></span>
+                    <div>
+                      <strong
+                        x-text="t.sum.amount"
+                        style="font-size: larger"
+                      ></strong>
+                      <span x-text="t.sum.currency"></span>
+                      <span style="color: rgb(75, 75, 75)">from</span>
+                      <span
+                        x-text="lookupPool(data.pools, t.pool_id).display_name"
+                      ></span>
+                    </div>
+                    <div x-text="t.description"></div>
                   </div>
-                  <div x-text="t.description"></div>
+                  <div>
+                    <button
+                      x-data="{ transId: t.id }"
+                      x-on:click="() => {deleteTransaction(transId, data)}"
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 </div>
               </template>
             </div>
@@ -197,5 +231,13 @@
     max-width: min(100vh, 700px);
     margin: auto;
     margin-top: 2rem;
+  }
+
+  button {
+    background-color: initial;
+    cursor: pointer;
+    border: 1px gray solid;
+    border-radius: 5px;
+    padding: 0.2rem 0.4rem;
   }
 </style>
