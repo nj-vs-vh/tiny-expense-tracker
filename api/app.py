@@ -12,7 +12,6 @@ from fastapi.responses import PlainTextResponse
 
 from api.auth import Auth
 from api.exchange_rates import ExchangeRates
-from api.iso4217 import CURRENCIES
 from api.storage import Storage
 from api.types.api import (
     MainApiRouteResponse,
@@ -23,7 +22,7 @@ from api.types.api import (
     SyncBalanceRequestBody,
     TransferMoneyRequestBody,
 )
-from api.types.currency import Currency
+from api.types.currency import Currency, CurrencyAdapter
 from api.types.datetime import Datetime
 from api.types.ids import UserId
 from api.types.money_pool import MoneyPool, StoredMoneyPool
@@ -136,12 +135,13 @@ def create_app(
         start: Datetime,
         end: Datetime | None = None,
         points: ReportPoints = 30,
-        currency: Currency = CURRENCIES["EUR"],
+        target_currency: str = "EUR",
     ) -> ReportApiRouteResponse:
         if start.tzinfo is None or (end is not None and end.tzinfo is None):
             raise HTTPException(
                 status_code=400, detail="All datetimes must have timezone info specified"
             )
+        target_currency_: Currency = CurrencyAdapter.validate_python(target_currency)
         pools = await storage.load_pools(user_id)
         current_pools_by_id = {p.id: p for p in pools}
 
@@ -181,11 +181,11 @@ def create_app(
 
         snapshots: list[ReportPoolSnapshot] = []
         for dt, pools in zip(snapshot_dts, snapshot_pools):
-            overall_total = MoneySum(amount=Decimal(0), currency=currency)
+            overall_total = MoneySum(amount=Decimal(0), currency=target_currency_)
             pool_stats: list[ReportPoolStats] = []
             for pool in pools:
                 pool_total_, fractions = await pool_total(
-                    pool, exchange_rates, target_currency=currency
+                    pool, exchange_rates, target_currency=target_currency_
                 )
                 pool_stats.append(
                     ReportPoolStats(pool=pool, total=pool_total_, fractions=fractions)
@@ -203,12 +203,12 @@ def create_app(
             spent=await sum_transactions(
                 transactions=(t.inverted() for t in transactions if t.sum.amount < 0),
                 exchange_rates=exchange_rates,
-                target_currency=currency,
+                target_currency=target_currency_,
             ),
             made=await sum_transactions(
                 transactions=(t for t in transactions if t.sum.amount > 0),
                 exchange_rates=exchange_rates,
-                target_currency=currency,
+                target_currency=target_currency_,
             ),
         )
 

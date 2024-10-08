@@ -1,13 +1,8 @@
 import abc
-import asyncio
 import datetime
-import json
 import logging
-import random
-import time
-from locale import currency
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import TypedDict
 
 import aiohttp
 import pydantic
@@ -40,7 +35,7 @@ class DumbExchangeRates(ExchangeRates):
             base=base,
             target=target,
             rate=1.0,
-            updated_on=datetime.datetime.now(),
+            updated_on=datetime.datetime.now(tz=datetime.UTC),
         )
 
 
@@ -87,7 +82,8 @@ class RemoteExchangeRates(ExchangeRates):
                                     target=CurrencyAdapter.validate_python(target_code),
                                     rate=rate,
                                     updated_on=datetime.datetime.fromtimestamp(
-                                        response["time_last_update_unix"]
+                                        response["time_last_update_unix"],
+                                        tz=datetime.UTC,
                                     ),
                                 )
                             )
@@ -129,12 +125,12 @@ class RemoteExchangeRates(ExchangeRates):
                 base=base,
                 target=target,
                 rate=1.0,
-                updated_on=datetime.datetime.now(),
+                updated_on=datetime.datetime.now(tz=datetime.UTC),
             )
         matches = self.get_cached_rate_matches(base, target)
-        if not matches or (datetime.datetime.now() - matches[0].updated_on) > datetime.timedelta(
-            days=3
-        ):
+        if not matches or (
+            datetime.datetime.now(tz=datetime.UTC) - matches[0].updated_on
+        ) > datetime.timedelta(days=3):
             await self.update_exchange_rates(base)
             matches = self.get_cached_rate_matches(base, target)
             if not matches:
