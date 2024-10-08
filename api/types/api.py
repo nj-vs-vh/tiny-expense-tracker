@@ -1,5 +1,7 @@
 import pydantic
 
+from api.types.currency import Currency
+from api.types.datetime import Datetime
 from api.types.ids import MoneyPoolId
 from api.types.money_pool import StoredMoneyPool
 from api.types.money_sum import MoneySum
@@ -26,6 +28,24 @@ class TransferMoneyRequestBody(pydantic.BaseModel):
 class MainApiRouteResponse(pydantic.BaseModel):
     pools: list[StoredMoneyPool]
     last_transactions: list[StoredTransaction]
+
+
+class ReportPoolStats(pydantic.BaseModel):
+    pool: StoredMoneyPool
+    total: MoneySum
+    fractions: dict[Currency, float]
+
+
+class ReportPoolSnapshot(pydantic.BaseModel):
+    timestamp: Datetime
+    pool_stats: list[ReportPoolStats]
+    overall_total: MoneySum
+
+
+class ReportApiRouteResponse(pydantic.BaseModel):
+    snapshots: list[ReportPoolSnapshot]
+    spent: MoneySum
+    made: MoneySum
 
 
 class LoginLinkResponse(pydantic.BaseModel):

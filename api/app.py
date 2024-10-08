@@ -1,8 +1,9 @@
+import copy
 import datetime
 import logging
 from contextlib import asynccontextmanager
 from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Annotated, Iterable, Literal
 
 import pydantic
 from fastapi import Depends, FastAPI, HTTPException
@@ -11,22 +12,29 @@ from fastapi.responses import PlainTextResponse
 
 from api.auth import Auth
 from api.exchange_rates import ExchangeRates
+from api.iso4217 import CURRENCIES
 from api.storage import Storage
 from api.types.api import (
     MainApiRouteResponse,
     MoneyPoolAttributesUpdate,
+    ReportApiRouteResponse,
+    ReportPoolSnapshot,
+    ReportPoolStats,
     SyncBalanceRequestBody,
     TransferMoneyRequestBody,
 )
-from api.types.ids import MoneyPoolId, UserId
+from api.types.currency import Currency
+from api.types.datetime import Datetime
+from api.types.ids import UserId
 from api.types.money_pool import MoneyPool, StoredMoneyPool
 from api.types.money_sum import MoneySum
-from api.types.transaction import StoredTransaction, Transaction
+from api.types.transaction import StoredTransaction, Transaction, TransactionFilter
 
 logger = logging.getLogger(__name__)
 
 Offset = Annotated[int, pydantic.Field(ge=0)]
 Count = Annotated[int, pydantic.Field(ge=1, le=200)]
+ReportPoints = Annotated[int, pydantic.Field(ge=1, le=60)]
 
 Ok = Literal["OK"]
 
@@ -44,6 +52,33 @@ async def coerce_to_pool(
     transaction.sum = MoneySum(
         amount=Decimal(float(transaction.sum.amount) * rate.rate),
         currency=rate.target,
+    )
+
+
+async def pool_total(
+    pool: MoneyPool, exchange_rates: ExchangeRates, target_currency: Currency
+) -> tuple[MoneySum, dict[Currency, float]]:
+    contributions: dict[Currency, float] = {}
+    for sum_ in pool.balance:
+        rate = await exchange_rates.get_rate(base=sum_.currency, target=target_currency)
+        contributions[sum_.currency] = float(sum_.amount) * rate.rate
+    total_amount = sum(p for p in contributions.values())
+    total = MoneySum(amount=Decimal(total_amount), currency=target_currency)
+    total.round_for_currency()
+    fractions = {c: p / total_amount for c, p in contributions.items()}
+    return total, fractions
+
+
+async def sum_transactions(
+    transactions: Iterable[Transaction], exchange_rates: ExchangeRates, target_currency: Currency
+) -> MoneySum:
+    total_amt = 0.0
+    for t in transactions:
+        rate = await exchange_rates.get_rate(base=t.sum.currency, target=target_currency)
+        total_amt += float(t.sum.amount) * rate.rate
+    return MoneySum(
+        amount=Decimal(total_amt),
+        currency=target_currency,
     )
 
 
@@ -95,6 +130,69 @@ def create_app(
             last_transactions=last_transactions,
         )
 
+    @app.get("/report")
+    async def generate_report(
+        user_id: AuthorizedUser,
+        start: Datetime,
+        end: Datetime | None = None,
+        points: ReportPoints = 30,
+        currency: Currency = CURRENCIES["EUR"],
+    ) -> ReportApiRouteResponse:
+        pools = await storage.load_pools(user_id)
+        current_pools_by_id = {p.id: p for p in pools}
+        end_dt = end or datetime.datetime.now(tz=datetime.UTC)
+        transactions = await storage.load_transactions(
+            user_id,
+            filter=TransactionFilter(min_timestamp=start, max_timestamp=end_dt),
+            offset=0,
+            count=1000,
+        )
+        timestep = (end_dt.timestamp() - start.timestamp()) / (points - 1)
+        snapshot_dts = [
+            end_dt - datetime.timedelta(seconds=timestep * steps) for steps in range(points)
+        ]
+        snapshot_pools = [copy.deepcopy(list(current_pools_by_id.values()))]
+        for t in transactions:
+            if t.timestamp > snapshot_dts[len(snapshot_pools)]:
+                snapshot_pools.append(copy.deepcopy(list(current_pools_by_id.values())))
+            current_pools_by_id[t.pool_id].update_with_transaction(t.inverted())
+        missing_snapshots_count = len(snapshot_dts) - len(snapshot_pools)
+        for _ in range(missing_snapshots_count):
+            snapshot_pools.append(copy.deepcopy(list(current_pools_by_id.values())))
+
+        snapshots: list[ReportPoolSnapshot] = []
+        for dt, pools in zip(snapshot_dts, snapshot_pools):
+            overall_total = MoneySum(amount=Decimal(0), currency=currency)
+            pool_stats: list[ReportPoolStats] = []
+            for pool in pools:
+                pool_total_, fractions = await pool_total(
+                    pool, exchange_rates, target_currency=currency
+                )
+                pool_stats.append(
+                    ReportPoolStats(pool=pool, total=pool_total_, fractions=fractions)
+                )
+                overall_total.amount += pool_total_.amount
+            snapshots.append(
+                ReportPoolSnapshot(
+                    timestamp=dt,
+                    pool_stats=pool_stats,
+                    overall_total=overall_total,
+                )
+            )
+        return ReportApiRouteResponse(
+            snapshots=snapshots,
+            spent=await sum_transactions(
+                transactions=(t for t in transactions if t.sum.amount < 0),
+                exchange_rates=exchange_rates,
+                target_currency=currency,
+            ),
+            made=await sum_transactions(
+                transactions=(t for t in transactions if t.sum.amount > 0),
+                exchange_rates=exchange_rates,
+                target_currency=currency,
+            ),
+        )
+
     @app.post("/pools")
     async def create_pool(user_id: AuthorizedUser, new_pool: MoneyPool) -> StoredMoneyPool:
         return await storage.add_pool(user_id=user_id, new_pool=new_pool)
@@ -121,7 +219,9 @@ def create_app(
             raise HTTPException(status_code=404, detail="Pool not found")
 
     @app.post("/transactions")
-    async def add_transaction(user_id: AuthorizedUser, transaction: Transaction) -> StoredTransaction:
+    async def add_transaction(
+        user_id: AuthorizedUser, transaction: Transaction
+    ) -> StoredTransaction:
         money_pool = await storage.load_pool(user_id=user_id, pool_id=transaction.pool_id)
         if money_pool is None:
             raise HTTPException(

@@ -16,11 +16,11 @@ logging.basicConfig(
 
 app = create_app(
     storage=InmemoryStorage(),
-    auth=TokenAuth(
-        server_tokens=["example-token"],
-        auth_telegram_bot_token=os.environ["AUTH_TGBOT_TOKEN"],
-    ),
-    # auth=NoAuth(),
+    # auth=TokenAuth(
+    #     server_tokens=["example-token"],
+    #     auth_telegram_bot_token=os.environ["AUTH_TGBOT_TOKEN"],
+    # ),
+    auth=NoAuth(),
     exchange_rates=DumbExchangeRates(),
     frontend_origins=["http://127.0.0.1:5500"],
 )

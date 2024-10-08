@@ -124,6 +124,13 @@ class RemoteExchangeRates(ExchangeRates):
         )
 
     async def get_rate(self, base: Currency, target: Currency) -> ExchangeRate:
+        if base == target:
+            return ExchangeRate(
+                base=base,
+                target=target,
+                rate=1.0,
+                updated_on=datetime.datetime.now(),
+            )
         matches = self.get_cached_rate_matches(base, target)
         if not matches or (datetime.datetime.now() - matches[0].updated_on) > datetime.timedelta(
             days=3

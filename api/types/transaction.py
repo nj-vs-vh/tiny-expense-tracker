@@ -1,3 +1,4 @@
+import copy
 import datetime
 
 import pydantic
@@ -19,6 +20,11 @@ class Transaction(pydantic.BaseModel):
 
     # for transactions made not in pool's currency
     original_currency: Currency | None = None
+
+    def inverted(self) -> "Transaction":
+        res = copy.deepcopy(self)
+        res.sum.amount *= -1
+        return res
 
 
 class StoredTransaction(Transaction):

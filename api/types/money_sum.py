@@ -13,7 +13,10 @@ class MoneySum(pydantic.BaseModel):
     def __str__(self) -> str:
         return f"{self.amount} {self.currency.code}"
 
+    def round_for_currency(self) -> None:
+        self.amount = round(self.amount, ndigits=self.currency.precision)
+
     @pydantic.model_validator(mode="after")
     def amount_has_correct_precision(self) -> Self:
-        self.amount = round(self.amount, ndigits=self.currency.precision)
+        self.round_for_currency()
         return self

@@ -66,9 +66,9 @@ class InmemoryStorage(Storage):
         self._user_pools: dict[UserId, list[StoredMoneyPool]] = {}
 
     async def add_pool(self, user_id: UserId, new_pool: MoneyPool) -> StoredMoneyPool:
-        sp = StoredMoneyPool.from_money_pool(new_pool, id=str(uuid.uuid4()))
-        self._user_pools.setdefault(user_id, []).append(sp)
-        return sp
+        stored_pool = StoredMoneyPool.from_money_pool(new_pool, id=str(uuid.uuid4()))
+        self._user_pools.setdefault(user_id, []).append(stored_pool)
+        return copy.deepcopy(stored_pool)
 
     async def add_balance_to_pool(
         self, user_id: UserId, pool_id: UserId, new_balance: MoneySum
@@ -94,11 +94,11 @@ class InmemoryStorage(Storage):
         return True
 
     async def load_pools(self, user_id: UserId) -> list[StoredMoneyPool]:
-        return self._user_pools.get(user_id, [])
+        return copy.deepcopy(self._user_pools.get(user_id, []))
 
     async def load_pool(self, user_id: UserId, pool_id: MoneyPoolId) -> StoredMoneyPool | None:
         user_pools = {p.id: p for p in await self.load_pools(user_id)}
-        return user_pools.get(pool_id)
+        return copy.deepcopy(user_pools.get(pool_id))
 
     async def add_transaction(self, user_id: str, transaction: Transaction) -> StoredTransaction:
         pool = await self.load_pool(user_id, transaction.pool_id)
@@ -107,7 +107,7 @@ class InmemoryStorage(Storage):
         pool.update_with_transaction(transaction)
         stored = StoredTransaction.from_transaction(transaction, id=str(uuid.uuid4()))
         self._user_transactions.setdefault(user_id, []).append(stored)
-        return stored
+        return copy.deepcopy(stored)
 
     async def load_transactions(
         self, user_id: UserId, filter: TransactionFilter | None, offset: int, count: int
@@ -117,7 +117,7 @@ class InmemoryStorage(Storage):
             transactions = [t for t in transactions if filter.matches(t)]
         end = len(transactions) - offset
         start = end - count - 1
-        return transactions[start:end]
+        return copy.deepcopy(transactions[start:end])
 
     async def delete_transaction(self, user_id: UserId, transaction_id: TransactionId) -> bool:
         user_transactions = self._user_transactions.get(user_id, [])
@@ -285,13 +285,19 @@ class MongoDbStorage(Storage):
     async def load_transactions(
         self, user_id: UserId, filter: TransactionFilter | None, offset: int, count: int
     ) -> list[StoredTransaction]:
+        query: dict[str, Any] = {"owner": user_id}
         if filter is not None:
-            # TODO
-            raise NotImplementedError()
+            timestamp_query = {}
+            if filter.min_timestamp:
+                timestamp_query["$gt"] = filter.min_timestamp.timestamp()
+            if filter.max_timestamp:
+                timestamp_query["$lt"] = filter.max_timestamp.timestamp()
+            if timestamp_query:
+                query["transaction.timestamp"] = timestamp_query
+            if filter.pool_ids:
+                query["transaction.pool_id"] = {"$in": filter.pool_ids}
         docs = (
-            await self.transactions_coll.find(
-                {"owner": user_id},
-            )
+            await self.transactions_coll.find(query)
             .sort("transaction.timestamp", -1)
             .skip(offset)
             .to_list(length=count)
@@ -327,9 +333,7 @@ class MongoDbStorage(Storage):
             )
             if result.deleted_count == 0:
                 return False
-            inverse_transaction = copy.deepcopy(to_be_deleted.transaction)
-            inverse_transaction.sum.amount = -inverse_transaction.sum.amount
-
+            inverse_transaction = to_be_deleted.transaction.inverted()
             pool = await self._load_pool_internal(
                 user_id, inverse_transaction.pool_id, session=session
             )
