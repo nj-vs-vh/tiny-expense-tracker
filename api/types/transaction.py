@@ -23,6 +23,8 @@ class Transaction(pydantic.BaseModel):
     # for transactions made not in pool's currency
     original_currency: Currency | None = None
 
+    tags: list[str] = pydantic.Field(default_factory=list)
+
     def inverted(self) -> "Transaction":
         res = copy.deepcopy(self)
         res.sum.amount = -res.sum.amount

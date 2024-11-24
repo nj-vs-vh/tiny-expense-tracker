@@ -123,6 +123,7 @@ def test_currency_coercion(client: TestClient) -> None:
             "pool_id": pool_id,
             "original_currency": "AMD",
             "id": MASKED_ID,
+            "tags": [],
         },
     ]
 
@@ -181,6 +182,7 @@ def test_sync_balance(client: TestClient) -> None:
             },
             "timestamp": RECENT_TIMESTAMP,
             "id": MASKED_ID,
+            "tags": [],
         },
         {
             "description": "my money synced 500.00 -> 490.50 GEL",
@@ -193,6 +195,7 @@ def test_sync_balance(client: TestClient) -> None:
             },
             "timestamp": RECENT_TIMESTAMP,
             "id": MASKED_ID,
+            "tags": [],
         },
         {
             "description": "my money synced 50.00 -> 0.00 EUR",
@@ -205,6 +208,7 @@ def test_sync_balance(client: TestClient) -> None:
             },
             "timestamp": RECENT_TIMESTAMP,
             "id": MASKED_ID,
+            "tags": [],
         },
     ]
 
@@ -268,6 +272,7 @@ def test_transfer_between_pools(client: TestClient) -> None:
             "is_diffuse": False,
             "original_currency": None,
             "id": MASKED_ID,
+            "tags": [],
         },
         {
             "sum": {"amount": "100.00", "currency": "USD"},
@@ -277,6 +282,7 @@ def test_transfer_between_pools(client: TestClient) -> None:
             "is_diffuse": False,
             "original_currency": None,
             "id": MASKED_ID,
+            "tags": [],
         },
     ]
 
@@ -371,4 +377,116 @@ def test_report(client: TestClient) -> None:
         ],
         "spent": {"amount": "210.00", "currency": "EUR"},
         "made": {"amount": "150.00", "currency": "EUR"},
+        "tag_totals": [
+            {
+                "total": {
+                    "amount": "-60.00",
+                    "currency": "EUR",
+                },
+                "tag": None,
+            },
+        ],
+    }
+
+
+def test_net_per_tag(client: TestClient) -> None:
+    response = client.post(
+        "/pools",
+        json={"display_name": "example", "balance": [{"amount": 300, "currency": "USD"}]},
+    )
+    assert response.status_code == 200
+    pool_id = response.json()["id"]
+
+    start = datetime.datetime(year=2024, month=9, day=1, tzinfo=datetime.UTC)
+
+    def make_transaction(amount: float, days: int, tags: list[str]):
+        response = client.post(
+            "/transactions",
+            json={
+                "timestamp": (start + datetime.timedelta(days=days)).timestamp(),
+                "sum": {"amount": amount, "currency": "USD"},
+                "pool_id": pool_id,
+                "description": "whatever",
+                "tags": tags,
+            },
+        )
+        assert response.status_code == 200
+
+    make_transaction(-10, 1, ["test"])
+    make_transaction(-20, 2, ["test"])
+    make_transaction(-15, 3, ["another"])
+    make_transaction(-100, 4, [])
+
+    response = client.get(
+        f"/report",
+        params={
+            "start": start.isoformat(),
+            "points": 2,
+        },
+    )
+    assert response.status_code == 200
+    assert mask_recent_timestamps(response.json()) == {
+        "snapshots": [
+            {
+                "timestamp": RECENT_TIMESTAMP,
+                "pool_stats": [
+                    {
+                        "pool": {
+                            "display_name": "example",
+                            "balance": [{"amount": "155.00", "currency": "USD"}],
+                            "is_visible": True,
+                            "last_updated": RECENT_TIMESTAMP,
+                            "display_color": None,
+                            "id": pool_id,
+                        },
+                        "total": {"amount": "155.00", "currency": "EUR"},
+                        "fractions": {"USD": 1.0},
+                    }
+                ],
+                "overall_total": {"amount": "155.00", "currency": "EUR"},
+            },
+            {
+                "timestamp": start.timestamp(),
+                "pool_stats": [
+                    {
+                        "pool": {
+                            "display_name": "example",
+                            "balance": [{"amount": "300.00", "currency": "USD"}],
+                            "is_visible": True,
+                            "last_updated": RECENT_TIMESTAMP,
+                            "display_color": None,
+                            "id": pool_id,
+                        },
+                        "total": {"amount": "300.00", "currency": "EUR"},
+                        "fractions": {"USD": 1.0},
+                    }
+                ],
+                "overall_total": {"amount": "300.00", "currency": "EUR"},
+            },
+        ],
+        "spent": {"amount": "145.00", "currency": "EUR"},
+        "made": {"amount": "0.00", "currency": "EUR"},
+        "tag_totals": [
+            {
+                "tag": None,
+                "total": {
+                    "amount": "-100.00",
+                    "currency": "EUR",
+                },
+            },
+            {
+                "tag": "test",
+                "total": {
+                    "amount": "-30.00",
+                    "currency": "EUR",
+                },
+            },
+            {
+                "tag": "another",
+                "total": {
+                    "amount": "-15.00",
+                    "currency": "EUR",
+                },
+            },
+        ],
     }

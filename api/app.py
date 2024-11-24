@@ -1,5 +1,8 @@
+import collections
 import copy
 import datetime
+import decimal
+import itertools
 import logging
 from contextlib import asynccontextmanager
 from decimal import Decimal
@@ -19,6 +22,7 @@ from api.types.api import (
     ReportApiRouteResponse,
     ReportPoolSnapshot,
     ReportPoolStats,
+    ReportTagNetTotal,
     SyncBalanceRequestBody,
     TransferMoneyRequestBody,
 )
@@ -33,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 Offset = Annotated[int, pydantic.Field(ge=0)]
 Count = Annotated[int, pydantic.Field(ge=1, le=200)]
-ReportPoints = Annotated[int, pydantic.Field(ge=1, le=60)]
+ReportPoints = Annotated[int, pydantic.Field(ge=2, le=60)]
 
 Ok = Literal["OK"]
 
@@ -201,6 +205,14 @@ def create_app(
                     overall_total=overall_total,
                 )
             )
+
+        transactions_per_tag: dict[str | None, list[Transaction]] = collections.defaultdict(list)
+        for t in transactions:
+            for tag in t.tags:
+                transactions_per_tag[tag].append(t)
+            if not t.tags:
+                transactions_per_tag[None].append(t)
+
         return ReportApiRouteResponse(
             snapshots=snapshots,
             spent=await sum_transactions(
@@ -212,6 +224,18 @@ def create_app(
                 transactions=(t for t in transactions if t.sum.amount > 0),
                 exchange_rates=exchange_rates,
                 target_currency=target_currency_,
+            ),
+            tag_totals=sorted(
+                [
+                    ReportTagNetTotal(
+                        tag=tag,
+                        total=await sum_transactions(
+                            ts, exchange_rates=exchange_rates, target_currency=target_currency_
+                        ),
+                    )
+                    for tag, ts in transactions_per_tag.items()
+                ],
+                key=lambda rtnt: rtnt.total.amount,
             ),
         )
 

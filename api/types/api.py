@@ -42,10 +42,16 @@ class ReportPoolSnapshot(pydantic.BaseModel):
     overall_total: MoneySum
 
 
+class ReportTagNetTotal(pydantic.BaseModel):
+    tag: str | None
+    total: MoneySum
+
+
 class ReportApiRouteResponse(pydantic.BaseModel):
     snapshots: list[ReportPoolSnapshot]
     spent: MoneySum
     made: MoneySum
+    tag_totals: list[ReportTagNetTotal]
 
 
 class LoginLinkResponse(pydantic.BaseModel):
