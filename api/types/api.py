@@ -57,3 +57,17 @@ class ReportApiRouteResponse(pydantic.BaseModel):
 class LoginLinkResponse(pydantic.BaseModel):
     url: str
     start_param: str
+
+
+class TransactionUpdate(pydantic.BaseModel):
+    description: str | None = None
+    timestamp: Datetime | None = None
+    tags: list[str] | None = None
+
+    def apply(self, tran: StoredTransaction) -> None:
+        if self.description is not None:
+            tran.description = self.description
+        if self.tags is not None:
+            tran.tags = self.tags
+        if self.timestamp is not None:
+            tran.timestamp = self.timestamp

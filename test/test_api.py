@@ -490,3 +490,77 @@ def test_net_per_tag(client: TestClient) -> None:
             },
         ],
     }
+
+
+def test_update_transaction(client: TestClient) -> None:
+    response = client.post(
+        "/pools",
+        json={
+            "display_name": "p1",
+            "balance": [
+                {"amount": 100, "currency": "EUR"},
+            ],
+        },
+    )
+    assert response.status_code == 200
+    pool_id = response.json()["id"]
+
+    for _ in range(3):
+        response = client.post(
+            "/transactions",
+            json={
+                "timestamp": datetime.datetime.now().isoformat(),
+                "sum": {"amount": -10, "currency": "EUR"},
+                "pool_id": pool_id,
+                "description": "one",
+            },
+        )
+        assert response.status_code == 200
+
+    response = client.get(
+        "/pools",
+    )
+    assert response.status_code == 200
+    assert mask_recent_timestamps(response.json()) == [
+        {
+            "display_name": "p1",
+            "balance": [
+                {"amount": "70.00", "currency": "EUR"},
+            ],
+            "display_color": None,
+            "id": pool_id,
+            "is_visible": True,
+            "last_updated": RECENT_TIMESTAMP,
+        }
+    ]
+
+    response = client.get("/transactions")
+    assert response.status_code == 200
+    transactions = response.json()
+    updated_tran_id = transactions[1]["id"]
+
+    response = client.put(
+        f"/transactions/{updated_tran_id}",
+        json={"description": "updated", "tags": ["updated", "tags"]},
+    )
+    assert response.status_code == 200
+
+    response = client.get("/transactions")
+    assert response.status_code == 200
+    transactions = response.json()
+    assert mask_recent_timestamps(transactions[1]) == {
+        "description": "updated",
+        "id": updated_tran_id,
+        "is_diffuse": False,
+        "original_currency": None,
+        "pool_id": pool_id,
+        "sum": {
+            "amount": "-10.00",
+            "currency": "EUR",
+        },
+        "tags": [
+            "updated",
+            "tags",
+        ],
+        "timestamp": "<recent timestamp>",
+    }

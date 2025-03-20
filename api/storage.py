@@ -14,7 +14,7 @@ from motor.motor_asyncio import (
     AsyncIOMotorCollection,
 )
 
-from api.types.api import MoneyPoolAttributesUpdate
+from api.types.api import MoneyPoolAttributesUpdate, TransactionUpdate
 from api.types.ids import MoneyPoolId, TransactionId, UserId
 from api.types.money_pool import MoneyPool, StoredMoneyPool
 from api.types.money_sum import MoneySum
@@ -56,6 +56,11 @@ class Storage(abc.ABC):
 
     @abc.abstractmethod
     async def delete_transaction(self, user_id: UserId, transaction_id: TransactionId) -> bool: ...
+
+    @abc.abstractmethod
+    async def update_transaction(
+        self, user_id: UserId, transaction_id: TransactionId, update: TransactionUpdate
+    ) -> bool: ...
 
 
 class InmemoryStorage(Storage):
@@ -128,19 +133,40 @@ class InmemoryStorage(Storage):
         start = end - count - 1
         return copy.deepcopy(transactions[start:end])
 
-    async def delete_transaction(self, user_id: UserId, transaction_id: TransactionId) -> bool:
+    def _lookup_transaction(
+        self, user_id: UserId, transaction_id: TransactionId
+    ) -> tuple[int, StoredTransaction] | None:
         user_transactions = self._user_transactions.get(user_id, [])
-        matching_transactions = [t for t in user_transactions if t.id == transaction_id]
+        matching_transactions = [
+            (i, t) for i, t in enumerate(user_transactions) if t.id == transaction_id
+        ]
         if not matching_transactions:
-            return False
+            return None
+        return matching_transactions[0]
 
-        deleted = matching_transactions[0]
+    async def delete_transaction(self, user_id: UserId, transaction_id: TransactionId) -> bool:
+        res = self._lookup_transaction(user_id, transaction_id)
+        if res is None:
+            return False
+        deleted_idx, deleted = res
         deleted = copy.deepcopy(deleted)
         deleted.sum.amount = -deleted.sum.amount  # invert for pool updating purpose
         pool = await self._load_pool_internal(user_id, deleted.pool_id)
         assert pool is not None
         pool.update_with_transaction(deleted)
-        self._user_transactions[user_id] = [t for t in user_transactions if t.id != transaction_id]
+        self._user_transactions[user_id].pop(deleted_idx)
+        return True
+
+    async def update_transaction(
+        self, user_id: UserId, transaction_id: TransactionId, update: TransactionUpdate
+    ) -> bool:
+        res = self._lookup_transaction(user_id, transaction_id)
+        if res is None:
+            return False
+        modified_idx, modified = res
+        modified = copy.deepcopy(modified)
+        update.apply(modified)
+        self._user_transactions[user_id][modified_idx] = modified
         return True
 
 
@@ -305,6 +331,8 @@ class MongoDbStorage(Storage):
                 query["transaction.timestamp"] = timestamp_query
             if filter.pool_ids:
                 query["transaction.pool_id"] = {"$in": filter.pool_ids}
+            if filter.transaction_ids:
+                query["_id"] = {"$in": [ObjectId(tid) for tid in filter.transaction_ids]}
         docs = (
             await self.transactions_coll.find(query)
             .sort("transaction.timestamp", -1)
@@ -353,3 +381,19 @@ class MongoDbStorage(Storage):
 
         async with await self.client.start_session() as session:
             return await session.with_transaction(internal)
+
+    async def update_transaction(
+        self, user_id: UserId, transaction_id: TransactionId, update: TransactionUpdate
+    ) -> bool:
+        update_doc: dict[str, Any] = {}
+        if update.description is not None:
+            update_doc["transaction.description"] = update.description
+        if update.timestamp is not None:
+            update_doc["transaction.timestamp"] = update.timestamp.timestamp()
+        if update.tags is not None:
+            update_doc["transaction.tags"] = update.tags
+        res = await self.transactions_coll.update_one(
+            filter=self._transaction_filter(user_id, transaction_id),
+            update={"$set": update_doc},
+        )
+        return res.modified_count == 1

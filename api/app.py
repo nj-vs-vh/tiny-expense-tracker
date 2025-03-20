@@ -22,6 +22,7 @@ from api.types.api import (
     ReportPoolStats,
     ReportTagNetTotal,
     SyncBalanceRequestBody,
+    TransactionUpdate,
     TransferMoneyRequestBody,
 )
 from api.types.currency import Currency, CurrencyAdapter
@@ -285,6 +286,17 @@ def create_app(
     @app.delete("/transactions/{transaction_id}", response_class=PlainTextResponse)
     async def delete_transaction(user_id: AuthorizedUser, transaction_id: str) -> Ok:
         if await storage.delete_transaction(user_id=user_id, transaction_id=transaction_id):
+            return "OK"
+        else:
+            raise HTTPException(status_code=404, detail="No such transaction")
+
+    @app.put("/transactions/{transaction_id}", response_class=PlainTextResponse)
+    async def update_transaction(
+        user_id: AuthorizedUser, transaction_id: str, update: TransactionUpdate
+    ) -> Ok:
+        if await storage.update_transaction(
+            user_id=user_id, transaction_id=transaction_id, update=update
+        ):
             return "OK"
         else:
             raise HTTPException(status_code=404, detail="No such transaction")
