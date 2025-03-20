@@ -1,9 +1,7 @@
 import copy
 import datetime
-import uuid
 from typing import Any, Callable, TypeVar
 
-from typing_extensions import TypeGuard
 
 DataT = TypeVar("DataT")
 

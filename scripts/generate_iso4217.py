@@ -6,7 +6,6 @@
 import argparse
 import datetime
 import pprint
-import string
 import xml
 import xml.etree
 import xml.etree.ElementTree
@@ -18,7 +17,7 @@ ROOT_DIR = Path(__file__).parent.parent
 ISO_4216_PY = ROOT_DIR / "api/iso4217.py"
 ISO_4216_PY.write_text(
     f"""
-# generated automatically by scripts/generate_iso4217.py on {datetime.datetime.now().isoformat(timespec='seconds')}
+# generated automatically by scripts/generate_iso4217.py on {datetime.datetime.now().isoformat(timespec="seconds")}
 # not intended for manual editing
 
 from api.types.currency_iso4217 import CurrencyISO4217

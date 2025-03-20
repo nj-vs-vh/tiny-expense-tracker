@@ -15,7 +15,7 @@ def parse_currency(v: Any) -> CurrencyISO4217:
             raise ValueError(f"not a valid ISO 4217 code: {v}")
         return CURRENCIES[v]
     else:
-        raise TypeError(f"currency value must be a string containing three-letter ISO2417 code")
+        raise TypeError("currency value must be a string containing three-letter ISO2417 code")
 
 
 def dump_currency(c: CurrencyISO4217):

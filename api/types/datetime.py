@@ -12,7 +12,7 @@ def parse_datetime(v: Any) -> dt.datetime:
     elif isinstance(v, str):
         try:
             return dt.datetime.fromtimestamp(float(v), tz=dt.UTC)
-        except:
+        except Exception:
             return dt.datetime.fromisoformat(v)
     else:
         raise ValueError("expected UNIX timestamp or ISO string")

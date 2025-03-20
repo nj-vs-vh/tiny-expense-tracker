@@ -53,7 +53,7 @@ def test_basic_flow(client: TestClient) -> None:
     assert response.status_code == 200
 
     response = client.get(
-        f"/pools",
+        "/pools",
     )
     assert response.status_code == 200
     assert mask_recent_timestamps(response.json()) == [
@@ -96,7 +96,7 @@ def test_currency_coercion(client: TestClient) -> None:
     )
     assert response.status_code == 200
 
-    response = client.get(f"/pools")
+    response = client.get("/pools")
     assert response.status_code == 200
     assert mask_recent_timestamps(response.json()) == [
         {
@@ -151,7 +151,7 @@ def test_sync_balance(client: TestClient) -> None:
     )
     assert response.status_code == 200
 
-    response = client.get(f"/pools")
+    response = client.get("/pools")
     assert response.status_code == 200
     assert mask_recent_timestamps(response.json()) == [
         {
@@ -310,7 +310,7 @@ def test_report(client: TestClient) -> None:
 
     end = start + datetime.timedelta(days=14)
     response = client.get(
-        f"/report",
+        "/report",
         params={
             "start": start.isoformat(),
             "end": end.isoformat(),
@@ -418,7 +418,7 @@ def test_net_per_tag(client: TestClient) -> None:
     make_transaction(-100, 4, [])
 
     response = client.get(
-        f"/report",
+        "/report",
         params={
             "start": start.isoformat(),
             "points": 2,

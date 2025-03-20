@@ -1,9 +1,7 @@
-[tool.black]
+[tool.ruff]
 line-length = 99
-
-[tool.isort]
-profile = 'black'
-line_length = 99
+indent-width = 4
+target-version = "py312"
 
 [tool.mypy]
 files = 'api/'

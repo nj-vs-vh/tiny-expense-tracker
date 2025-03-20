@@ -383,7 +383,7 @@ CURRENCIES = {
             "GUERNSEY",
             "ISLE OF MAN",
             "JERSEY",
-            "UNITED KINGDOM OF GREAT BRITAIN AND NORTHERN IRELAND " "(THE)",
+            "UNITED KINGDOM OF GREAT BRITAIN AND NORTHERN IRELAND (THE)",
         ],
         precision=2,
     ),

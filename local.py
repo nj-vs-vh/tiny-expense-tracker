@@ -1,10 +1,9 @@
 import logging
-import os
 
 from dotenv import load_dotenv
 
 from api.app import create_app
-from api.auth import NoAuth, TokenAuth
+from api.auth import NoAuth
 from api.exchange_rates import DumbExchangeRates
 from api.storage import InmemoryStorage
 

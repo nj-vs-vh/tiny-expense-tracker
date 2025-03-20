@@ -1,8 +1,6 @@
 import collections
 import copy
 import datetime
-import decimal
-import itertools
 import logging
 from contextlib import asynccontextmanager
 from decimal import Decimal
@@ -94,7 +92,6 @@ def create_app(
     exchange_rates: ExchangeRates,
     frontend_origins: list[str] | None = None,
 ) -> FastAPI:
-
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         logger.info("Running lifespan methods")

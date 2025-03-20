@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 from fastapi.testclient import TestClient
 
 from api.app import create_app
-from api.auth import NoAuth, RSAAuth
+from api.auth import RSAAuth
 from api.exchange_rates import DumbExchangeRates
 from api.storage import InmemoryStorage
 

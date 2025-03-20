@@ -21,7 +21,6 @@ class ExchangeRate(pydantic.BaseModel):
 
 
 class ExchangeRates(abc.ABC):
-
     async def initialize(self) -> None:
         pass
 
@@ -104,11 +103,11 @@ class RemoteExchangeRates(ExchangeRates):
                             seen_pairs.add(pair)
                             filtered_rates.append(exchange_rate)
                     self._cached_rates = filtered_rates
-                    logger.exception(f"Cached rates updated, saving on disk")
+                    logger.exception("Cached rates updated, saving on disk")
                     self.cache_file_path.write_bytes(
                         ExchangeRateList.dump_json(self._cached_rates)
                     )
-                    logger.exception(f"Cached rates saved to file")
+                    logger.exception("Cached rates saved to file")
         except Exception:
             logger.exception(f"Error updating exchnage rates for {base}")
 
