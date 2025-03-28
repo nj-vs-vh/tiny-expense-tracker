@@ -1,5 +1,6 @@
 import abc
 import copy
+import enum
 import logging
 import time
 import uuid
@@ -19,6 +20,24 @@ from api.types.ids import MoneyPoolId, TransactionId, UserId
 from api.types.money_pool import MoneyPool, StoredMoneyPool
 from api.types.money_sum import MoneySum
 from api.types.transaction import StoredTransaction, Transaction, TransactionFilter
+
+
+class TransactionOrder(enum.Enum):
+    LATEST = "latest"
+    OLDEST = "oldest"
+    LARGEST = "largest"
+    LARGEST_NEGATIVE = "largest_negative"
+
+    def key(self, tran: StoredTransaction) -> float:
+        match self:
+            case TransactionOrder.LATEST:
+                return tran.timestamp.timestamp()
+            case TransactionOrder.OLDEST:
+                return -tran.timestamp.timestamp()
+            case TransactionOrder.LARGEST:
+                return -float(tran.sum.amount)
+            case TransactionOrder.LARGEST_NEGATIVE:
+                return float(tran.sum.amount)
 
 
 class Storage(abc.ABC):
@@ -51,7 +70,12 @@ class Storage(abc.ABC):
 
     @abc.abstractmethod
     async def load_transactions(
-        self, user_id: UserId, filter: TransactionFilter | None, offset: int, count: int
+        self,
+        user_id: UserId,
+        filter: TransactionFilter | None,
+        order: TransactionOrder,
+        offset: int,
+        count: int,
     ) -> list[StoredTransaction]: ...
 
     @abc.abstractmethod
@@ -124,11 +148,17 @@ class InmemoryStorage(Storage):
         return copy.deepcopy(stored)
 
     async def load_transactions(
-        self, user_id: UserId, filter: TransactionFilter | None, offset: int, count: int
+        self,
+        user_id: UserId,
+        filter: TransactionFilter | None,
+        order: TransactionOrder,
+        offset: int,
+        count: int,
     ) -> list[StoredTransaction]:
         transactions = self._user_transactions.get(user_id, [])
         if filter is not None:
             transactions = [t for t in transactions if filter.matches(t)]
+        transactions.sort(key=order.key, reverse=True)  # reverse True to get "most fitting" last
         end = len(transactions) - offset
         start = end - count - 1
         return copy.deepcopy(transactions[start:end])
@@ -318,7 +348,12 @@ class MongoDbStorage(Storage):
             return await session.with_transaction(internal)
 
     async def load_transactions(
-        self, user_id: UserId, filter: TransactionFilter | None, offset: int, count: int
+        self,
+        user_id: UserId,
+        filter: TransactionFilter | None,
+        order: TransactionOrder,
+        offset: int,
+        count: int,
     ) -> list[StoredTransaction]:
         query: dict[str, Any] = {"owner": user_id}
         if filter is not None:
@@ -333,9 +368,24 @@ class MongoDbStorage(Storage):
                 query["transaction.pool_id"] = {"$in": filter.pool_ids}
             if filter.transaction_ids:
                 query["_id"] = {"$in": [ObjectId(tid) for tid in filter.transaction_ids]}
+            if filter.untagged_only:
+                query["transaction.tags"] = {"$size": 0}
+            if filter.is_diffuse is not None:
+                query["transaction.is_diffuse"] = filter.is_diffuse
+
+        match order:
+            case TransactionOrder.LATEST:
+                sort_key, sort_dir = "transaction.timestamp", -1
+            case TransactionOrder.OLDEST:
+                sort_key, sort_dir = "transaction.timestamp", 1
+            case TransactionOrder.LARGEST:
+                sort_key, sort_dir = "transaction.amount_eur", -1
+            case TransactionOrder.LARGEST_NEGATIVE:
+                sort_key, sort_dir = "transaction.amount_eur", 1
+
         docs = (
             await self.transactions_coll.find(query)
-            .sort("transaction.timestamp", -1)
+            .sort(sort_key, sort_dir)
             .skip(offset)
             .to_list(length=count)
         )

@@ -17,6 +17,9 @@ class Transaction(pydantic.BaseModel):
         default_factory=lambda: datetime.datetime.now(tz=datetime.UTC)
     )
 
+    # converted at time of transaction; None is for input transactions and backwards compatibility
+    amount_eur: float | None = None
+
     # diffuse = a transaction implying any number of actual transactions too small to be tracked
     is_diffuse: bool = False
 
@@ -44,6 +47,8 @@ class TransactionFilter(pydantic.BaseModel):
     max_timestamp: Datetime | None = None
     pool_ids: list[MoneyPoolId] | None = None
     transaction_ids: list[TransactionId] | None = None
+    untagged_only: bool = False
+    is_diffuse: bool = False
 
     @classmethod
     def empty(cls) -> "TransactionFilter":
@@ -57,5 +62,9 @@ class TransactionFilter(pydantic.BaseModel):
         if self.pool_ids is not None and t.pool_id not in self.pool_ids:
             return False
         if self.transaction_ids is not None and t.id not in self.transaction_ids:
+            return False
+        if self.untagged_only and t.tags:
+            return False
+        if self.is_diffuse is not None and t.is_diffuse != self.is_diffuse:
             return False
         return True

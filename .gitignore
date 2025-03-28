@@ -222,6 +222,7 @@ pip-selfcheck.json
 
 # Custom rules (everything added below won't be overriden by 'Generate .gitignore File' if you use 'Update' option)
 .exchange-rates.json
+exchange_rates_cache.json
 temp*.py
 frontend/index.html
 .vscode

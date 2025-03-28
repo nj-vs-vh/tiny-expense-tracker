@@ -13,7 +13,7 @@ from fastapi.responses import PlainTextResponse
 
 from api.auth import Auth
 from api.exchange_rates import ExchangeRates
-from api.storage import Storage
+from api.storage import Storage, TransactionOrder
 from api.types.api import (
     MainApiRouteResponse,
     MoneyPoolAttributesUpdate,
@@ -25,7 +25,7 @@ from api.types.api import (
     TransactionUpdate,
     TransferMoneyRequestBody,
 )
-from api.types.currency import Currency, CurrencyAdapter
+from api.types.currency import Currency, CurrencyAdapter, parse_currency
 from api.types.datetime import Datetime
 from api.types.ids import UserId
 from api.types.money_pool import MoneyPool, StoredMoneyPool
@@ -39,6 +39,8 @@ Count = Annotated[int, pydantic.Field(ge=1, le=200)]
 ReportPoints = Annotated[int, pydantic.Field(ge=2, le=60)]
 
 Ok = Literal["OK"]
+
+EUR = parse_currency("EUR")
 
 
 async def coerce_to_pool(
@@ -127,7 +129,11 @@ def create_app(
     async def main_api_route(user_id: AuthorizedUser) -> MainApiRouteResponse:
         pools = await storage.load_pools(user_id)
         last_transactions = await storage.load_transactions(
-            user_id, filter=None, offset=0, count=30
+            user_id,
+            filter=None,
+            offset=0,
+            count=30,
+            order=TransactionOrder.LATEST,
         )
         return MainApiRouteResponse(
             pools=pools,
@@ -157,6 +163,7 @@ def create_app(
                 filter=TransactionFilter(min_timestamp=end),
                 offset=0,
                 count=10_000,
+                order=TransactionOrder.LATEST,
             )
             for t in transactions_after_end:
                 current_pools_by_id[t.pool_id].update_with_transaction(t.inverted())
@@ -168,6 +175,7 @@ def create_app(
             filter=TransactionFilter(min_timestamp=start, max_timestamp=end_dt),
             offset=0,
             count=1000,
+            order=TransactionOrder.LATEST,
         )
         timestep = (end_dt.timestamp() - start.timestamp()) / (points - 1)
         snapshot_dts = [
@@ -175,6 +183,7 @@ def create_app(
         ]
         snapshot_pools = [copy.deepcopy(list(current_pools_by_id.values()))]
         # going over transactions latest to earliest, applying
+        # FIXME: when generating a report, use saved amount_eur value
         transactions.sort(key=lambda t: t.timestamp, reverse=True)
         for t in transactions:
             if t.timestamp < snapshot_dts[len(snapshot_pools)]:
@@ -272,15 +281,24 @@ def create_app(
                 status_code=400,
                 detail="Transaction is attributed to non-existent money pool",
             )
+        to_eur = await exchange_rates.get_rate(transaction.sum.currency, EUR)
+        transaction.amount_eur = float(transaction.sum.amount) * to_eur.rate
         await coerce_to_pool(transaction, money_pool, exchange_rates)
         return await storage.add_transaction(user_id=user_id, transaction=transaction)
 
     @app.get("/transactions")
     async def get_transactions(
-        user_id: AuthorizedUser, offset: Offset = 0, count: Count = 10
+        user_id: AuthorizedUser,
+        offset: Offset = 0,
+        count: Count = 10,
+        order: TransactionOrder = TransactionOrder.LATEST,
     ) -> list[StoredTransaction]:
         return await storage.load_transactions(
-            user_id=user_id, filter=None, offset=offset, count=count
+            user_id=user_id,
+            filter=None,
+            offset=offset,
+            count=count,
+            order=order,
         )
 
     @app.delete("/transactions/{transaction_id}", response_class=PlainTextResponse)

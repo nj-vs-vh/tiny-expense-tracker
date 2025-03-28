@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 class ExchangeRate(pydantic.BaseModel):
+    """Amount in target = rate * amount in base"""
+
     base: Currency
     target: Currency
     rate: float
