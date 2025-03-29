@@ -336,17 +336,20 @@ def create_app(
         added.amount = abs(added.amount)
         deducted = MoneySum(amount=-added.amount, currency=added.currency)
 
+        descr_suffix = f" {body.description}" if body.description else ""
         transaction_deduct = Transaction(
             sum=deducted,
             pool_id=body.from_pool,
             # NOTE: not a bug - use the positive amount for display
-            description=f"Transfer {added} to {to_pool.display_name} ({body.description})",
+            description=f"Transfer {added} to {to_pool.display_name}" + descr_suffix,
+            tags=["moves"],
         )
         await coerce_to_pool(transaction_deduct, from_pool, exchange_rates)
         transaction_add = Transaction(
             sum=added,
             pool_id=body.to_pool,
-            description=f"Transfer {added} from {from_pool.display_name} ({body.description})",
+            description=f"Transfer {added} from {from_pool.display_name}" + descr_suffix,
+            tags=["moves"],
         )
         await coerce_to_pool(transaction_add, to_pool, exchange_rates)
 
