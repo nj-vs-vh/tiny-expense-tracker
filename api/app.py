@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 Offset = Annotated[int, pydantic.Field(ge=0)]
 Count = Annotated[int, pydantic.Field(ge=1, le=200)]
-ReportPoints = Annotated[int, pydantic.Field(ge=2, le=60)]
+ReportPoints = Annotated[int, pydantic.Field(ge=2, le=360)]
 
 Ok = Literal["OK"]
 
@@ -152,6 +152,7 @@ def create_app(
             raise HTTPException(
                 status_code=400, detail="All datetimes must have timezone info specified"
             )
+        MAX_TRANSACTIONS_TO_LOAD = 100_000
         target_currency_: Currency = CurrencyAdapter.validate_python(target_currency)
         pools = await storage.load_pools(user_id)
         current_pools_by_id = {p.id: p for p in pools}
@@ -162,9 +163,13 @@ def create_app(
                 user_id,
                 filter=TransactionFilter(min_timestamp=end),
                 offset=0,
-                count=10_000,
+                count=MAX_TRANSACTIONS_TO_LOAD,
                 order=TransactionOrder.LATEST,
             )
+            if len(transactions_after_end) == MAX_TRANSACTIONS_TO_LOAD:
+                raise HTTPException(
+                    status_code=400, detail="Too many transactions in the requested period"
+                )
             for t in transactions_after_end:
                 current_pools_by_id[t.pool_id].update_with_transaction(t.inverted())
 
@@ -174,9 +179,13 @@ def create_app(
             user_id,
             filter=TransactionFilter(min_timestamp=start, max_timestamp=end_dt),
             offset=0,
-            count=1000,
+            count=MAX_TRANSACTIONS_TO_LOAD,
             order=TransactionOrder.LATEST,
         )
+        if len(transactions) == MAX_TRANSACTIONS_TO_LOAD:
+            raise HTTPException(
+                status_code=400, detail="Too many transactions in the requested period"
+            )
         timestep = (end_dt.timestamp() - start.timestamp()) / (points - 1)
         snapshot_dts = [
             end_dt - datetime.timedelta(seconds=timestep * steps) for steps in range(points)
