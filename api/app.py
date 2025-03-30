@@ -4,7 +4,7 @@ import datetime
 import logging
 from contextlib import asynccontextmanager
 from decimal import Decimal
-from typing import Annotated, Iterable, Literal
+from typing import Annotated, Iterable, Literal, Sequence
 
 import pydantic
 from fastapi import Depends, FastAPI, HTTPException
@@ -81,12 +81,25 @@ async def sum_transactions(
 ) -> MoneySum:
     total_amt = 0.0
     for t in transactions:
-        rate = await exchange_rates.get_rate(base=t.sum.currency, target=target_currency)
-        total_amt += float(t.sum.amount) * rate.rate
+        if target_currency.code == EUR.code and t.amount_eur is not None:
+            total_amt += t.amount_eur
+        else:
+            rate = await exchange_rates.get_rate(base=t.sum.currency, target=target_currency)
+            total_amt += float(t.sum.amount) * rate.rate
     return MoneySum(
         amount=Decimal(total_amt),
         currency=target_currency,
     )
+
+
+def transactions_per_tag(transactions: Sequence[Transaction]):
+    res: dict[str | None, list[Transaction]] = collections.defaultdict(list)
+    for t in transactions:
+        for tag in t.tags:
+            res[tag].append(t)
+        if not t.tags:
+            res[None].append(t)
+    return res
 
 
 def create_app(
@@ -186,27 +199,34 @@ def create_app(
             raise HTTPException(
                 status_code=400, detail="Too many transactions in the requested period"
             )
+
         timestep = (end_dt.timestamp() - start.timestamp()) / (points - 1)
         snapshot_dts = [
             end_dt - datetime.timedelta(seconds=timestep * steps) for steps in range(points)
         ]
+
         snapshot_pools = [copy.deepcopy(list(current_pools_by_id.values()))]
-        # going over transactions latest to earliest, applying
-        # FIXME: when generating a report, use saved amount_eur value
+        # going over transactions latest to earliest, applying them backwars to get pool state
+        # at snapshot times
         transactions.sort(key=lambda t: t.timestamp, reverse=True)
+        transaction_between_snapshots: list[list[StoredTransaction]] = [[]]
         for t in transactions:
+            transaction_between_snapshots[-1].append(t)
             if t.timestamp < snapshot_dts[len(snapshot_pools)]:
                 snapshot_pools.append(copy.deepcopy(list(current_pools_by_id.values())))
+                transaction_between_snapshots.append([])
             current_pools_by_id[t.pool_id].update_with_transaction(t.inverted())
         missing_snapshots_count = len(snapshot_dts) - len(snapshot_pools)
         for _ in range(missing_snapshots_count):
             snapshot_pools.append(copy.deepcopy(list(current_pools_by_id.values())))
 
         snapshots: list[ReportPoolSnapshot] = []
-        for dt, pools in zip(snapshot_dts, snapshot_pools):
+        for dt, pools_at_snapshot, transactions_before_snapshot in zip(
+            snapshot_dts, snapshot_pools, transaction_between_snapshots
+        ):
             overall_total = MoneySum(amount=Decimal(0), currency=target_currency_)
             pool_stats: list[ReportPoolStats] = []
-            for pool in pools:
+            for pool in pools_at_snapshot:
                 pool_total_, fractions = await pool_total(
                     pool, exchange_rates, target_currency=target_currency_
                 )
@@ -219,15 +239,24 @@ def create_app(
                     timestamp=dt,
                     pool_stats=pool_stats,
                     overall_total=overall_total,
+                    tag_totals_from_prev_snapshot=sorted(
+                        [
+                            ReportTagNetTotal(
+                                tag=tag,
+                                total=await sum_transactions(
+                                    ts,
+                                    exchange_rates=exchange_rates,
+                                    target_currency=target_currency_,
+                                ),
+                            )
+                            for tag, ts in transactions_per_tag(
+                                transactions_before_snapshot
+                            ).items()
+                        ],
+                        key=lambda rtnt: rtnt.total.amount,
+                    ),
                 )
             )
-
-        transactions_per_tag: dict[str | None, list[Transaction]] = collections.defaultdict(list)
-        for t in transactions:
-            for tag in t.tags:
-                transactions_per_tag[tag].append(t)
-            if not t.tags:
-                transactions_per_tag[None].append(t)
 
         return ReportApiRouteResponse(
             snapshots=snapshots,
@@ -249,7 +278,7 @@ def create_app(
                             ts, exchange_rates=exchange_rates, target_currency=target_currency_
                         ),
                     )
-                    for tag, ts in transactions_per_tag.items()
+                    for tag, ts in transactions_per_tag(transactions).items()
                 ],
                 key=lambda rtnt: rtnt.total.amount,
             ),
