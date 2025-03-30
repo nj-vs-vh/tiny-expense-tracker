@@ -43,9 +43,9 @@ async def main() -> None:
             is_diffuse=False,
             untagged_only=True,
         ),
-        order=TransactionOrder.LARGEST,
+        order=TransactionOrder.LARGEST_NEGATIVE,
         offset=0,
-        count=10_000,
+        count=100_000,
     )
     print(f"Got a total of {len(transactions)} transactions")
 
@@ -55,6 +55,9 @@ async def main() -> None:
         if action == "q":
             break
         elif action == "s":
+            continue
+        elif not action:
+            print("No action provided, skipping")
             continue
         print(f"Applying tag {action}")
         await storage.update_transaction(
