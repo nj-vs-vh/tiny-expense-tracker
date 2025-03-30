@@ -16,14 +16,14 @@ async def main() -> None:
     transactions = await storage.load_transactions(
         user_id,
         filter=TransactionFilter(
-            min_timestamp=datetime.datetime(2025, 1, 1),
-            max_timestamp=datetime.datetime(2025, 3, 1),
-            is_diffuse=False,
+            min_timestamp=datetime.datetime(2024, 11, 1),
+            max_timestamp=datetime.datetime(2024, 11, 30),
+            is_diffuse=None,
             untagged_only=True,
         ),
-        order=TransactionOrder.LARGEST_NEGATIVE,
+        order=TransactionOrder.OLDEST,
         offset=0,
-        count=30,
+        count=300,
     )
     print(*transactions, sep="\n\n")
 

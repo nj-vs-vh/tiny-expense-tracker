@@ -48,7 +48,7 @@ class TransactionFilter(pydantic.BaseModel):
     pool_ids: list[MoneyPoolId] | None = None
     transaction_ids: list[TransactionId] | None = None
     untagged_only: bool = False
-    is_diffuse: bool = False
+    is_diffuse: bool | None = None
 
     @classmethod
     def empty(cls) -> "TransactionFilter":

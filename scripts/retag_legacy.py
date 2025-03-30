@@ -49,8 +49,14 @@ async def main() -> None:
     )
     print(f"Got a total of {len(transactions)} transactions")
 
+    pools = await storage.load_pools(user_id)
+    pool_name_by_id = {pool.id: pool.display_name for pool in pools}
     for transaction in transactions:
-        print(f"{transaction.timestamp} {transaction.sum} {transaction.description}")
+        pool_name = pool_name_by_id.get(transaction.pool_id, "Unknown pool")
+        print(
+            f"{transaction.timestamp.isoformat(timespec='minutes')} {transaction.sum} {pool_name}"
+            + f"\n\t{transaction.description}"
+        )
         action = input("[tag, s to skip, q to quit] > ")
         if action == "q":
             break

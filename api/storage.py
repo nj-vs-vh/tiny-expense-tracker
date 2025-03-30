@@ -370,6 +370,8 @@ class MongoDbStorage(Storage):
                 query["_id"] = {"$in": [ObjectId(tid) for tid in filter.transaction_ids]}
             if filter.untagged_only:
                 query["transaction.tags"] = {"$size": 0}
+                # add for legacy?
+                # query["transaction.tags"] = {"$exists": False}
             if filter.is_diffuse is not None:
                 query["transaction.is_diffuse"] = filter.is_diffuse
 
