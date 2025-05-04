@@ -205,24 +205,34 @@ def create_app(
             end_dt - datetime.timedelta(seconds=timestep * steps) for steps in range(points)
         ]
 
-        snapshot_pools = [copy.deepcopy(list(current_pools_by_id.values()))]
+        logger.info(f"Computing snapshots at {len(snapshot_dts)} points with time step {timestep}")
+
         # going over transactions latest to earliest, applying them backwars to get pool state
         # at snapshot times
         transactions.sort(key=lambda t: t.timestamp, reverse=True)
-        transaction_between_snapshots: list[list[StoredTransaction]] = [[]]
+        pools_by_id_snapshots = [copy.deepcopy(list(current_pools_by_id.values()))]
+        transaction_before_snapshot: list[list[StoredTransaction]] = [[]]
         for t in transactions:
-            transaction_between_snapshots[-1].append(t)
-            if t.timestamp < snapshot_dts[len(snapshot_pools)]:
-                snapshot_pools.append(copy.deepcopy(list(current_pools_by_id.values())))
-                transaction_between_snapshots.append([])
+            transaction_before_snapshot[-1].append(t)
+            if t.timestamp < snapshot_dts[len(pools_by_id_snapshots)]:
+                pools_by_id_snapshots.append(copy.deepcopy(list(current_pools_by_id.values())))
+                transaction_before_snapshot.append([])
             current_pools_by_id[t.pool_id].update_with_transaction(t.inverted())
-        missing_snapshots_count = len(snapshot_dts) - len(snapshot_pools)
+
+        missing_snapshots_count = len(snapshot_dts) - len(pools_by_id_snapshots)
         for _ in range(missing_snapshots_count):
-            snapshot_pools.append(copy.deepcopy(list(current_pools_by_id.values())))
+            pools_by_id_snapshots.append(copy.deepcopy(list(current_pools_by_id.values())))
+            transaction_before_snapshot.append([])
+
+        assert len(snapshot_dts) == points, "Incorrect number of snapshot dts"
+        assert len(pools_by_id_snapshots) == points, "Incorrect number of pool snapshots"
+        assert (
+            len(transaction_before_snapshot) == points
+        ), "Incorrect number of transaction subsets"
 
         snapshots: list[ReportPoolSnapshot] = []
         for dt, pools_at_snapshot, transactions_before_snapshot in zip(
-            snapshot_dts, snapshot_pools, transaction_between_snapshots
+            snapshot_dts, pools_by_id_snapshots, transaction_before_snapshot
         ):
             overall_total = MoneySum(amount=Decimal(0), currency=target_currency_)
             pool_stats: list[ReportPoolStats] = []
