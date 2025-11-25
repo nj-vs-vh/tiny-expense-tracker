@@ -226,3 +226,4 @@ exchange_rates_cache.json
 temp*.py
 frontend/index.html
 .vscode
+*.csv
