@@ -226,9 +226,9 @@ def create_app(
 
         assert len(snapshot_dts) == points, "Incorrect number of snapshot dts"
         assert len(pools_by_id_snapshots) == points, "Incorrect number of pool snapshots"
-        assert (
-            len(transaction_before_snapshot) == points
-        ), "Incorrect number of transaction subsets"
+        assert len(transaction_before_snapshot) == points, (
+            "Incorrect number of transaction subsets"
+        )
 
         snapshots: list[ReportPoolSnapshot] = []
         for dt, pools_at_snapshot, transactions_before_snapshot in zip(
