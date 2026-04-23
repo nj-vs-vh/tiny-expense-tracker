@@ -33,7 +33,7 @@ async def main() -> None:
         all_tags = doc["tags_unique"]
 
     print("All tags:")
-    print(", ".join(all_tags))
+    print(", ".join(f"'{tag}'" for tag in sorted(all_tags)))
 
     transactions = await storage.load_transactions(
         user_id,
