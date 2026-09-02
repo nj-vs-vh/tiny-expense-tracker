@@ -31,6 +31,7 @@ class Transaction(pydantic.BaseModel):
     def inverted(self) -> "Transaction":
         res = copy.deepcopy(self)
         res.sum.amount = -res.sum.amount
+        res.amount_eur = -res.amount_eur if res.amount_eur is not None else None
         return res
 
 
