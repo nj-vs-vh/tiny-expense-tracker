@@ -8,10 +8,11 @@ from api.types.money_sum import MoneySum
 from api.types.transaction import StoredTransaction
 
 
-class MoneyPoolAttributesUpdate(pydantic.BaseModel):
+class MoneyPoolUpdate(pydantic.BaseModel):
     is_visible: bool | None = None
     display_name: str | None = None
     display_color: str | None = None
+    new_balances: list[MoneySum] = pydantic.Field(default_factory=list)
 
 
 class SyncBalanceRequestBody(pydantic.BaseModel):

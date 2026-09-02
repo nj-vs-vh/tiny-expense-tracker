@@ -15,7 +15,7 @@ from motor.motor_asyncio import (
     AsyncIOMotorCollection,
 )
 
-from api.types.api import MoneyPoolAttributesUpdate, TransactionUpdate
+from api.types.api import MoneyPoolUpdate, TransactionUpdate
 from api.types.ids import MoneyPoolId, TransactionId, UserId
 from api.types.money_pool import MoneyPool, StoredMoneyPool
 from api.types.money_sum import MoneySum
@@ -54,7 +54,7 @@ class Storage(abc.ABC):
 
     @abc.abstractmethod
     async def set_pool_attributes(
-        self, user_id: UserId, pool_id: MoneyPoolId, update: MoneyPoolAttributesUpdate
+        self, user_id: UserId, pool_id: MoneyPoolId, update: MoneyPoolUpdate
     ) -> bool: ...
 
     @abc.abstractmethod
@@ -112,7 +112,7 @@ class InmemoryStorage(Storage):
             raise ValueError(f"Balance already has currency {new_balance.currency.code}")
 
     async def set_pool_attributes(
-        self, user_id: UserId, pool_id: MoneyPoolId, update: MoneyPoolAttributesUpdate
+        self, user_id: UserId, pool_id: MoneyPoolId, update: MoneyPoolUpdate
     ) -> bool:
         p = await self._load_pool_internal(user_id, pool_id)
         if p is None:
@@ -295,7 +295,7 @@ class MongoDbStorage(Storage):
         return result.modified_count == 1
 
     async def set_pool_attributes(
-        self, user_id: UserId, pool_id: MoneyPoolId, update: MoneyPoolAttributesUpdate
+        self, user_id: UserId, pool_id: MoneyPoolId, update: MoneyPoolUpdate
     ) -> bool:
         result = await self.pools_coll.update_one(
             self._pool_filter(user_id, pool_id),
@@ -311,7 +311,11 @@ class MongoDbStorage(Storage):
                 }
             },
         )
-        return result.modified_count == 1
+        is_ok = result.modified_count == 1
+        if update.new_balances:
+            for new_balance in update.new_balances:
+                is_ok = is_ok and await self.add_balance_to_pool(user_id, pool_id, new_balance)
+        return is_ok
 
     async def _update_pool_internal(
         self,

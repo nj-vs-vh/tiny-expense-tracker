@@ -16,7 +16,7 @@ from api.exchange_rates import ExchangeRates
 from api.storage import Storage, TransactionOrder
 from api.types.api import (
     MainApiRouteResponse,
-    MoneyPoolAttributesUpdate,
+    MoneyPoolUpdate,
     ReportApiRouteResponse,
     ReportPoolSnapshot,
     ReportPoolStats,
@@ -311,9 +311,7 @@ def create_app(
             return pool
 
     @app.put("/pools/{pool_id}", response_class=PlainTextResponse)
-    async def modify_pool(
-        user_id: AuthorizedUser, pool_id: str, update: MoneyPoolAttributesUpdate
-    ) -> Ok:
+    async def modify_pool(user_id: AuthorizedUser, pool_id: str, update: MoneyPoolUpdate) -> Ok:
         if await storage.set_pool_attributes(user_id, pool_id=pool_id, update=update):
             return "OK"
         else:
