@@ -311,11 +311,10 @@ class MongoDbStorage(Storage):
                 }
             },
         )
-        is_ok = result.modified_count == 1
-        if update.new_balances:
-            for new_balance in update.new_balances:
-                is_ok = is_ok and await self.add_balance_to_pool(user_id, pool_id, new_balance)
-        return is_ok
+        is_updated_flags = [result.modified_count == 1]
+        for new_balance in update.new_balances:
+            is_updated_flags.append(await self.add_balance_to_pool(user_id, pool_id, new_balance))
+        return any(is_updated_flags)
 
     async def _update_pool_internal(
         self,
