@@ -6,3 +6,4 @@ aiohttp==3.9.5
 cryptography==42.0.8
 telebot-against-war==0.7.3
 cachetools==5.4.0
+pymongo==4.8.0
